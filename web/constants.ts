@@ -15,115 +15,150 @@ export const CARD_LIBRARY: Record<CardType, CardTemplate[]> = {
     {
       id: 'hook-1',
       cardType: 'hook',
-      title: '年轻女性 + 宠物',
-      imageContent: 'https://picsum.photos/id/237/300/200',
-      textContent: '目标人群：年轻女性\n元素：可爱宠物\n情绪：治愈、温馨'
+      title: '智商羞辱',
+      imageContent: 'https://picsum.photos/id/180/300/200',
+      textContent: '心理动机：证明自己更聪明\n受众：喜欢挑战的用户\n文案方向："只有2%的人能在30秒内解开"\n转化率：高'
     },
     {
       id: 'hook-2',
       cardType: 'hook',
-      title: '职场精英 + 效率',
-      imageContent: 'https://picsum.photos/id/180/300/200',
-      textContent: '目标人群：职场人士\n元素：办公场景\n情绪：高效、专业'
+      title: '好奇心驱动',
+      imageContent: 'https://picsum.photos/id/1015/300/200',
+      textContent: '心理动机：想知道答案\n受众：求知欲强的用户\n文案方向："你能找出这张图的秘密吗？"\n适用：Cryptogram、Find Difference'
     },
     {
       id: 'hook-3',
       cardType: 'hook',
-      title: '家庭生活 + 温馨',
+      title: '成就感获取',
+      imageContent: 'https://picsum.photos/id/367/300/200',
+      textContent: '心理动机：完成任务的满足感\n受众：目标导向型用户\n文案方向："每天10分钟，挑战你的大脑"\n留存：高'
+    },
+    {
+      id: 'hook-4',
+      cardType: 'hook',
+      title: '社交炫耀',
+      imageContent: 'https://picsum.photos/id/64/300/200',
+      textContent: '心理动机：向朋友展示智商\n受众：社交活跃用户\n文案方向："我通关了Expert关卡，你敢来吗？"\n分享率：高'
+    },
+    {
+      id: 'hook-5',
+      cardType: 'hook',
+      title: '焦虑缓解',
       imageContent: 'https://picsum.photos/id/1074/300/200',
-      textContent: '目标人群：家庭用户\n元素：居家场景\n情绪：温暖、舒适'
+      textContent: '心理动机：通过专注游戏放松\n受众：压力大的上班族\n文案方向："3分钟解压，不需要思考"\n使用场景：碎片时间'
     }
   ],
   inspiration: [
     {
       id: 'insp-1',
       cardType: 'inspiration',
-      title: '小红书热门话题',
-      imageContent: 'https://picsum.photos/id/48/300/200',
-      textContent: '话题：#秋日穿搭\n热度：100w+\n适用场景：服饰、美妆'
+      title: '圣诞节热点',
+      imageContent: 'https://picsum.photos/id/145/300/200',
+      textContent: '节日：Christmas 2024\n热度：超高\n创意方向：圣诞老人找礼物、雪景找不同\n素材元素：圣诞树、雪花、礼物盒'
     },
     {
       id: 'insp-2',
       cardType: 'inspiration',
-      title: '抖音爆款格式',
-      imageContent: 'https://picsum.photos/id/367/300/200',
-      textContent: '格式：前后对比\n数据：平均播放500w+\n适用：改造类、教程类'
+      title: '新年挑战',
+      imageContent: 'https://picsum.photos/id/395/300/200',
+      textContent: '节日：New Year 2025\n热度：高\n创意方向："新年第一题，测测你的IQ"\n素材元素：烟花、红包、福字'
     },
     {
       id: 'insp-3',
       cardType: 'inspiration',
-      title: '竞品案例分析',
-      imageContent: 'https://picsum.photos/id/430/300/200',
-      textContent: '品牌：某美妆品牌\n数据：转化率3.5%\n可借鉴点：视觉风格、文案节奏'
+      title: '情人节浪漫',
+      imageContent: 'https://picsum.photos/id/225/300/200',
+      textContent: '节日：Valentine\'s Day\n热度：中高\n创意方向：情侣找不同、浪漫密码\n素材元素：玫瑰、爱心、巧克力'
+    },
+    {
+      id: 'insp-4',
+      cardType: 'inspiration',
+      title: '复仇者联盟热映',
+      imageContent: 'https://picsum.photos/id/237/300/200',
+      textContent: '热点：电影上映\n热度：爆炸\n创意方向：超级英雄找不同\n版权：需注意，使用同类元素'
+    },
+    {
+      id: 'insp-5',
+      cardType: 'inspiration',
+      title: '世界杯期间',
+      imageContent: 'https://picsum.photos/id/431/300/200',
+      textContent: '热点：World Cup\n热度：极高\n创意方向：足球场景找不同、球星密码\n受众：体育爱好者'
     }
   ],
   template: [
     {
       id: 'temp-1',
       cardType: 'template',
-      title: 'Betty IP 模板',
-      imageContent: 'https://picsum.photos/id/64/300/200',
-      textContent: '风格：可爱、亲和\n配色：粉色系\n出量数据：日均10w+'
+      title: '验证有效模板 A',
+      imageContent: '/images/template1.jpg',
+      textContent: 'ROI：3.2\nCTR：8.5%\nCVR：12.3%\n日消耗：$5000\n验证时间：2024-11'
     },
-    {
-      id: 'temp-2',
-      cardType: 'template',
-      title: '图文卡片模板',
-      imageContent: 'https://picsum.photos/id/brown/300/200',
-      textContent: '布局：上图下文\n比例：16:9\n适用：知识类、产品介绍'
-    },
-    {
-      id: 'temp-3',
-      cardType: 'template',
-      title: '视频封面模板',
-      imageContent: 'https://picsum.photos/id/152/300/200',
-      textContent: '元素：大标题+关键信息\n色彩：高对比度\n点击率：提升40%'
-    }
   ],
   product: [
     {
       id: 'prod-1',
       cardType: 'product',
-      title: '产品主图',
-      imageContent: 'https://picsum.photos/id/160/300/200',
-      textContent: '产品：智能手表\n角度：45度斜视\n背景：纯白'
+      title: 'Cryptogram 主界面',
+      imageContent: '/images/product1.png',
+      textContent: '产品：Cryptogram Expert Level 5\n展示：谜题界面 + 键盘\n用途：展示核心玩法'
     },
     {
       id: 'prod-2',
       cardType: 'product',
-      title: '使用场景图',
-      imageContent: 'https://picsum.photos/id/201/300/200',
-      textContent: '场景：户外运动\n模特：年轻女性\n光线：自然光'
+      title: 'Find Difference 关卡',
+      imageContent: 'https://picsum.photos/id/1025/300/200',
+      textContent: '产品：Find Difference Level 12\n场景：卧室找不同\n难度：中等\n用途：展示画面精美度'
     },
     {
       id: 'prod-3',
       cardType: 'product',
-      title: '细节特写',
-      imageContent: 'https://picsum.photos/id/250/300/200',
-      textContent: '重点：材质纹理\n拍摄：微距\n用途：展示品质'
+      title: '成就系统截图',
+      imageContent: 'https://picsum.photos/id/367/300/200',
+      textContent: '产品：Achievement Page\n展示：奖杯、徽章、排行榜\n用途：激励用户完成挑战'
+    },
+    {
+      id: 'prod-4',
+      cardType: 'product',
+      title: '每日挑战界面',
+      imageContent: 'https://picsum.photos/id/395/300/200',
+      textContent: '产品：Daily Challenge\n展示：限时任务 + 奖励\n用途：展示持续可玩性'
     }
   ],
   constraint: [
     {
       id: 'cons-1',
       cardType: 'constraint',
-      title: '比例约束 16:9',
-      imageContent: 'https://picsum.photos/id/gray/300/200',
-      textContent: '平台：抖音、B站\n原因：横屏主流\n注意：留白安全区'
+      title: '平台约束 - Facebook',
+      imageContent: 'https://picsum.photos/id/430/300/200',
+      textContent: '比例：1:1 或 4:5\n时长：≤15秒\n文字：避免"免费""最好"\n审核：严格，避免智商歧视'
     },
     {
       id: 'cons-2',
       cardType: 'constraint',
-      title: '风格约束：小清新',
-      imageContent: 'https://picsum.photos/id/1015/300/200',
-      textContent: '色调：明亮、柔和\n禁止：暗黑、重金属\n品牌调性要求'
+      title: '平台约束 - TikTok',
+      imageContent: 'https://picsum.photos/id/48/300/200',
+      textContent: '比例：9:16 竖屏\n时长：9-15秒最佳\n节奏：前3秒必须抓眼球\n音乐：使用平台热门BGM'
     },
     {
       id: 'cons-3',
       cardType: 'constraint',
-      title: '时长约束 15-30秒',
-      imageContent: 'https://picsum.photos/id/1025/300/200',
-      textContent: '平台：短视频\n原因：完播率优化\n建议：黄金3秒开头'
+      title: '品牌调性约束',
+      imageContent: 'https://picsum.photos/id/152/300/200',
+      textContent: '风格：轻松、友好、不说教\n禁止：过度智商羞辱\n色调：明亮、温暖\n目标：让用户觉得"我也能行"'
+    },
+    {
+      id: 'cons-4',
+      cardType: 'constraint',
+      title: '受众年龄约束',
+      imageContent: 'https://picsum.photos/id/250/300/200',
+      textContent: '主要受众：25-55岁\n避免：过于年轻化的梗\n语言：简洁、通俗\n场景：日常生活相关'
+    },
+    {
+      id: 'cons-5',
+      cardType: 'constraint',
+      title: 'ROI 目标约束',
+      imageContent: 'https://picsum.photos/id/160/300/200',
+      textContent: '目标ROI：≥2.0\nCPI上限：$1.2\nD7留存：≥15%\n需在此约束下优化素材'
     }
   ]
 };
