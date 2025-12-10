@@ -24,6 +24,7 @@ const Editor: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
   const [isCardSelectorOpen, setIsCardSelectorOpen] = useState(false);
+  const [resizingElement, setResizingElement] = useState<{ id: string; handle: string; startX: number; startY: number; startWidth: number; startHeight: number; startElementX: number; startElementY: number } | null>(null);
 
   // Initialize
   useEffect(() => {
@@ -33,6 +34,41 @@ const Editor: React.FC = () => {
       setElements(project.elements);
     }
   }, [id]);
+
+  // Keyboard Event Handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Delete selected elements (Delete or Backspace)
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Prevent deletion if user is typing in an input field
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return;
+        }
+
+        if (selectedIds.size > 0) {
+          e.preventDefault();
+          setElements(prev => prev.filter(el => !selectedIds.has(el.id)));
+          setSelectedIds(new Set());
+        }
+      }
+
+      // Zoom in (Ctrl/Cmd + Plus or Equal)
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+        e.preventDefault();
+        setViewport(prev => ({ ...prev, scale: Math.min(5, prev.scale + 0.1) }));
+      }
+
+      // Zoom out (Ctrl/Cmd + Minus)
+      if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault();
+        setViewport(prev => ({ ...prev, scale: Math.max(0.1, prev.scale - 0.1) }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIds]);
 
   // Coordinate Conversion
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -73,6 +109,63 @@ const Editor: React.FC = () => {
       return;
     }
 
+    // Handle resizing
+    if (resizingElement) {
+      const { id, handle, startX, startY, startWidth, startHeight, startElementX, startElementY } = resizingElement;
+      const totalDeltaX = (e.clientX - startX) / viewport.scale;
+      const totalDeltaY = (e.clientY - startY) / viewport.scale;
+
+      setElements(prev => prev.map(el => {
+        if (el.id === id) {
+          let newX = startElementX;
+          let newY = startElementY;
+          let newWidth = startWidth;
+          let newHeight = startHeight;
+
+          // Handle different resize directions
+          if (handle.includes('n')) {
+            newY = startElementY + totalDeltaY;
+            newHeight = startHeight - totalDeltaY;
+          }
+          if (handle.includes('s')) {
+            newHeight = startHeight + totalDeltaY;
+          }
+          if (handle.includes('w')) {
+            newX = startElementX + totalDeltaX;
+            newWidth = startWidth - totalDeltaX;
+          }
+          if (handle.includes('e')) {
+            newWidth = startWidth + totalDeltaX;
+          }
+
+          // Enforce minimum size
+          const minSize = 50;
+          if (newWidth < minSize) {
+            if (handle.includes('w')) {
+              newX = startElementX + startWidth - minSize;
+            }
+            newWidth = minSize;
+          }
+          if (newHeight < minSize) {
+            if (handle.includes('n')) {
+              newY = startElementY + startHeight - minSize;
+            }
+            newHeight = minSize;
+          }
+
+          return {
+            ...el,
+            x: newX,
+            y: newY,
+            width: newWidth,
+            height: newHeight
+          };
+        }
+        return el;
+      }));
+      return;
+    }
+
     if (draggedElementId && activeTool === 'select') {
       setElements(prev => prev.map(el => {
         if (el.id === draggedElementId) {
@@ -90,6 +183,7 @@ const Editor: React.FC = () => {
   const handlePointerUp = (e: React.PointerEvent) => {
     setIsPanning(false);
     setDraggedElementId(null);
+    setResizingElement(null);
     e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
@@ -113,7 +207,7 @@ const Editor: React.FC = () => {
   const handleElementMouseDown = (e: React.MouseEvent, id: string) => {
     if (activeTool === 'hand') return;
     e.stopPropagation();
-    
+
     // Select
     if (!e.shiftKey) {
         setSelectedIds(new Set([id]));
@@ -131,6 +225,24 @@ const Editor: React.FC = () => {
         setDraggedElementId(id);
         setLastMousePos({ x: e.clientX, y: e.clientY });
     }
+  };
+
+  const handleResizeStart = (e: React.MouseEvent, id: string, handle: string) => {
+    e.stopPropagation();
+    const element = elements.find(el => el.id === id);
+    if (!element) return;
+
+    setResizingElement({
+      id,
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      startWidth: element.width,
+      startHeight: element.height,
+      startElementX: element.x,
+      startElementY: element.y
+    });
+    setLastMousePos({ x: e.clientX, y: e.clientY });
   };
 
   const handleAddText = () => {
@@ -329,11 +441,12 @@ const Editor: React.FC = () => {
                 }}
             >
                  {elements.map(el => (
-                    <CanvasItem 
-                        key={el.id} 
-                        element={el} 
-                        isSelected={selectedIds.has(el.id)} 
+                    <CanvasItem
+                        key={el.id}
+                        element={el}
+                        isSelected={selectedIds.has(el.id)}
                         onMouseDown={handleElementMouseDown}
+                        onResizeStart={handleResizeStart}
                     />
                  ))}
             </div>

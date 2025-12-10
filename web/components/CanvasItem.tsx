@@ -5,6 +5,7 @@ interface CanvasItemProps {
   element: CanvasElement;
   isSelected: boolean;
   onMouseDown: (e: React.MouseEvent, id: string) => void;
+  onResizeStart?: (e: React.MouseEvent, id: string, handle: string) => void;
 }
 
 const CARD_TYPE_COLORS = {
@@ -15,7 +16,13 @@ const CARD_TYPE_COLORS = {
   constraint: { bg: 'bg-red-50', border: 'border-red-200', label: 'bg-red-100 text-red-700', text: 'Constraint' },
 };
 
-export const CanvasItem: React.FC<CanvasItemProps> = ({ element, isSelected, onMouseDown }) => {
+export const CanvasItem: React.FC<CanvasItemProps> = ({ element, isSelected, onMouseDown, onResizeStart }) => {
+  const handleResizeMouseDown = (e: React.MouseEvent, handle: string) => {
+    e.stopPropagation();
+    if (onResizeStart) {
+      onResizeStart(e, element.id, handle);
+    }
+  };
   const renderCardContent = () => {
     if (element.type !== 'card' || !element.cardType) return null;
 
@@ -96,13 +103,44 @@ export const CanvasItem: React.FC<CanvasItemProps> = ({ element, isSelected, onM
         )}
       </div>
 
-      {/* Resize Handles (Visual Only for this demo) */}
+      {/* Resize Handles */}
       {isSelected && (
         <>
-            <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full" />
-            <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full" />
-            <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full" />
-            <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full" />
+          {/* Corner Handles */}
+          <div
+            className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-nwse-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 'nw')}
+          />
+          <div
+            className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-nesw-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 'ne')}
+          />
+          <div
+            className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-nesw-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 'sw')}
+          />
+          <div
+            className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-nwse-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 'se')}
+          />
+
+          {/* Edge Handles */}
+          <div
+            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-ns-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 'n')}
+          />
+          <div
+            className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-ns-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 's')}
+          />
+          <div
+            className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-ew-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 'w')}
+          />
+          <div
+            className="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-[#8576C7] rounded-full cursor-ew-resize z-10"
+            onMouseDown={(e) => handleResizeMouseDown(e, 'e')}
+          />
         </>
       )}
     </div>
