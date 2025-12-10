@@ -4,8 +4,47 @@ import { Icon } from '../components/ui/Icon';
 import { CanvasItem } from '../components/CanvasItem';
 import { CardSelector } from '../components/CardSelector';
 import { CanvasElement, Tool, Viewport } from '../types';
-import { MOCK_PROJECTS, INITIAL_VIEWPORT, CardTemplate } from '../constants';
+import { MOCK_PROJECTS, INITIAL_VIEWPORT, CardTemplate, CARD_LIBRARY } from '../constants';
 import { generateImageFromPrompt } from '../services/geminiService';
+
+type AIMode = 'generate' | 'inspire';
+
+interface ModeConfig {
+  label: string;
+  icon: string;
+  placeholder: string;
+  color: string;
+  borderColor: string;
+  bgColor: string;
+  buttonBg: string;
+  buttonHover: string;
+  description: string;
+}
+
+const MODE_CONFIGS: Record<AIMode, ModeConfig> = {
+  generate: {
+    label: '生图模式',
+    icon: 'Sparkles',
+    placeholder: '描述你想要生成的图片...',
+    color: 'text-[#8576C7]',
+    borderColor: 'border-[#EADDFF]',
+    bgColor: 'bg-white',
+    buttonBg: 'bg-[#EADDFF]',
+    buttonHover: 'hover:bg-[#E0CFFF]',
+    description: '使用 AI 生成全新图片'
+  },
+  inspire: {
+    label: 'Inspire 模式',
+    icon: 'Lightbulb',
+    placeholder: '描述你想要的创意灵感...',
+    color: 'text-[#F59E0B]',
+    borderColor: 'border-[#FEF3C7]',
+    bgColor: 'bg-amber-50',
+    buttonBg: 'bg-[#FEF3C7]',
+    buttonHover: 'hover:bg-[#FDE68A]',
+    description: '获取创意灵感和建议'
+  }
+};
 
 const Editor: React.FC = () => {
   const { id } = useParams();
@@ -26,6 +65,11 @@ const Editor: React.FC = () => {
   const [isCardSelectorOpen, setIsCardSelectorOpen] = useState(false);
   const [resizingElement, setResizingElement] = useState<{ id: string; handle: string; startX: number; startY: number; startWidth: number; startHeight: number; startElementX: number; startElementY: number } | null>(null);
   const [customCards, setCustomCards] = useState<CardTemplate[]>([]);
+  const [aiMode, setAiMode] = useState<AIMode>('generate');
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const [selectionRect, setSelectionRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Initialize
   useEffect(() => {
@@ -90,9 +134,18 @@ const Editor: React.FC = () => {
       return;
     }
 
-    // Deselect if clicking empty space
+    // Start selection rectangle if clicking empty space in select mode
     if (activeTool === 'select' && e.target === canvasRef.current) {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      setIsSelecting(true);
+      setSelectionRect({
+        startX: canvasPos.x,
+        startY: canvasPos.y,
+        endX: canvasPos.x,
+        endY: canvasPos.y
+      });
       setSelectedIds(new Set());
+      e.currentTarget.setPointerCapture(e.pointerId);
     }
   };
 
@@ -107,6 +160,17 @@ const Editor: React.FC = () => {
         x: prev.x + deltaX,
         y: prev.y + deltaY
       }));
+      return;
+    }
+
+    // Update selection rectangle while selecting
+    if (isSelecting && selectionRect) {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      setSelectionRect(prev => prev ? {
+        ...prev,
+        endX: canvasPos.x,
+        endY: canvasPos.y
+      } : null);
       return;
     }
 
@@ -182,6 +246,28 @@ const Editor: React.FC = () => {
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
+    // Finalize selection rectangle
+    if (isSelecting && selectionRect) {
+      const { startX, startY, endX, endY } = selectionRect;
+      const minX = Math.min(startX, endX);
+      const maxX = Math.max(startX, endX);
+      const minY = Math.min(startY, endY);
+      const maxY = Math.max(startY, endY);
+
+      // Select all elements that intersect with the selection rectangle
+      const selectedElements = elements.filter(el => {
+        const elRight = el.x + el.width;
+        const elBottom = el.y + el.height;
+
+        // Check if element intersects with selection rectangle
+        return !(el.x > maxX || elRight < minX || el.y > maxY || elBottom < minY);
+      });
+
+      setSelectedIds(new Set(selectedElements.map(el => el.id)));
+      setIsSelecting(false);
+      setSelectionRect(null);
+    }
+
     setIsPanning(false);
     setDraggedElementId(null);
     setResizingElement(null);
@@ -307,39 +393,163 @@ const Editor: React.FC = () => {
     setCustomCards(prev => [...prev, newCard]);
   };
 
+  const handleExport = async () => {
+    if (selectedIds.size === 0) {
+      alert('请先选择要导出的元素');
+      return;
+    }
+
+    try {
+      // Dynamic import JSZip
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+
+      const selectedElements = elements.filter(el => selectedIds.has(el.id));
+      let imageCount = 0;
+
+      for (const element of selectedElements) {
+        let imageUrl: string | undefined;
+
+        // Extract image URL based on element type
+        if (element.type === 'image') {
+          imageUrl = element.content;
+        } else if (element.type === 'card' && element.imageContent) {
+          imageUrl = element.imageContent;
+        }
+
+        if (imageUrl) {
+          imageCount++;
+          try {
+            // Fetch image and convert to blob
+            if (imageUrl.startsWith('data:')) {
+              // Data URL - convert directly
+              const base64Data = imageUrl.split(',')[1];
+              const mimeType = imageUrl.match(/data:([^;]+)/)?.[1] || 'image/png';
+              const ext = mimeType.split('/')[1] || 'png';
+              zip.file(`image_${imageCount}.${ext}`, base64Data, { base64: true });
+            } else {
+              // External URL - fetch and add
+              const response = await fetch(imageUrl);
+              const blob = await response.blob();
+              const ext = blob.type.split('/')[1] || 'png';
+              zip.file(`image_${imageCount}.${ext}`, blob);
+            }
+          } catch (error) {
+            console.error(`Failed to add image ${imageCount}:`, error);
+          }
+        }
+      }
+
+      if (imageCount === 0) {
+        alert('所选元素中没有图片');
+        return;
+      }
+
+      // Generate zip file and download
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `export_${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('导出失败，请重试');
+    }
+  };
+
   // AI Generation
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
-    
-    setIsGenerating(true);
-    
-    try {
-        const selectedElements = elements.filter(el => selectedIds.has(el.id));
-        const newImageUrl = await generateImageFromPrompt(prompt, selectedElements);
-        
-        let startX = 0, startY = 0;
-        if (selectedElements.length > 0) {
-            startX = selectedElements[0].x + selectedElements[0].width + 20;
-            startY = selectedElements[0].y;
-        } else {
-             const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
-             startX = center.x;
-             startY = center.y;
-        }
 
-        const newEl: CanvasElement = {
-            id: `ai-${Date.now()}`,
-            type: 'image',
-            x: startX,
-            y: startY,
-            width: 400,
-            height: 400,
-            content: newImageUrl
-        };
-        
-        setElements(prev => [...prev, newEl]);
-        setSelectedIds(new Set([newEl.id]));
-        setPrompt('');
+    setIsGenerating(true);
+
+    try {
+        if (aiMode === 'inspire') {
+            // Inspire Mode: Generate multiple Inspiration Cards
+            const inspirationCards = CARD_LIBRARY.inspiration;
+
+            // Randomly select 3-5 cards
+            const cardCount = Math.floor(Math.random() * 3) + 3; // 3-5 cards
+            const selectedCards: CardTemplate[] = [];
+            const availableCards = [...inspirationCards];
+
+            for (let i = 0; i < Math.min(cardCount, availableCards.length); i++) {
+                const randomIndex = Math.floor(Math.random() * availableCards.length);
+                selectedCards.push(availableCards[randomIndex]);
+                availableCards.splice(randomIndex, 1);
+            }
+
+            // Place cards on canvas in a grid layout
+            const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
+            const cardWidth = 300;
+            const cardHeight = 400;
+            const gap = 20;
+            const columns = Math.min(3, selectedCards.length);
+            const rows = Math.ceil(selectedCards.length / columns);
+
+            // Calculate starting position to center the grid
+            const totalWidth = columns * cardWidth + (columns - 1) * gap;
+            const totalHeight = rows * cardHeight + (rows - 1) * gap;
+            let startX = center.x - totalWidth / 2;
+            let startY = center.y - totalHeight / 2;
+
+            const newCards: CanvasElement[] = selectedCards.map((card, index) => {
+                const col = index % columns;
+                const row = Math.floor(index / columns);
+                const x = startX + col * (cardWidth + gap);
+                const y = startY + row * (cardHeight + gap);
+
+                return {
+                    id: `inspire-${Date.now()}-${index}`,
+                    type: 'card',
+                    cardType: 'inspiration',
+                    x,
+                    y,
+                    width: cardWidth,
+                    height: cardHeight,
+                    content: '',
+                    imageContent: card.imageContent,
+                    textContent: card.textContent
+                };
+            });
+
+            setElements(prev => [...prev, ...newCards]);
+            setSelectedIds(new Set(newCards.map(c => c.id)));
+            setPrompt('');
+
+        } else {
+            // Generate Mode: AI Image Generation
+            const selectedElements = elements.filter(el => selectedIds.has(el.id));
+            const newImageUrl = await generateImageFromPrompt(prompt, selectedElements);
+
+            let startX = 0, startY = 0;
+            if (selectedElements.length > 0) {
+                startX = selectedElements[0].x + selectedElements[0].width + 20;
+                startY = selectedElements[0].y;
+            } else {
+                 const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
+                 startX = center.x;
+                 startY = center.y;
+            }
+
+            const newEl: CanvasElement = {
+                id: `ai-${Date.now()}`,
+                type: 'image',
+                x: startX,
+                y: startY,
+                width: 400,
+                height: 400,
+                content: newImageUrl
+            };
+
+            setElements(prev => [...prev, newEl]);
+            setSelectedIds(new Set([newEl.id]));
+            setPrompt('');
+        }
     } catch (error) {
         console.error("Generation failed", error);
     } finally {
@@ -371,15 +581,19 @@ const Editor: React.FC = () => {
             
             {/* Right Section */}
             <div className="flex items-center gap-3 pointer-events-auto mt-2">
-                 <button className="flex items-center gap-2 px-5 h-10 text-[14px] font-medium text-gray-800 bg-[#F0F4F9] hover:bg-gray-200 rounded-full transition-colors">
-                    <Icon name="Share2" size={18} />
-                    Share
+                 <button
+                    onClick={handleExport}
+                    className="flex items-center gap-2 px-5 h-10 text-[14px] font-medium text-gray-800 bg-[#F0F4F9] hover:bg-gray-200 rounded-full transition-colors"
+                 >
+                    <Icon name="Download" size={18} />
+                    导出
                  </button>
-                 <button 
+                 <button
+                    onClick={() => setShowHelpModal(true)}
                     className="flex items-center gap-2 px-5 h-10 text-[14px] font-medium text-white bg-[#8576C7] hover:bg-[#7463B8] rounded-full shadow-sm transition-colors"
                  >
-                    <Icon name="Sparkles" size={16} className="fill-current" />
-                    Transform
+                    <Icon name="HelpCircle" size={16} />
+                    Help
                  </button>
             </div>
         </div>
@@ -454,8 +668,21 @@ const Editor: React.FC = () => {
                         onResizeStart={handleResizeStart}
                     />
                  ))}
+
+                 {/* Selection Rectangle */}
+                 {isSelecting && selectionRect && (
+                    <div
+                        className="absolute border-2 border-[#8576C7] bg-[#8576C7]/10 pointer-events-none"
+                        style={{
+                            left: Math.min(selectionRect.startX, selectionRect.endX),
+                            top: Math.min(selectionRect.startY, selectionRect.endY),
+                            width: Math.abs(selectionRect.endX - selectionRect.startX),
+                            height: Math.abs(selectionRect.endY - selectionRect.startY),
+                        }}
+                    />
+                 )}
             </div>
-            
+
             {/* Loading Indicator */}
             {isGenerating && (
                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 flex flex-col items-center pointer-events-none">
@@ -479,30 +706,80 @@ const Editor: React.FC = () => {
 
             {/* Center: AI Input */}
             <div className="pointer-events-auto flex items-center gap-3 w-full max-w-[800px] mx-auto mb-1">
-                 {/* Plus Button */}
-                <button 
-                    className="w-[52px] h-[52px] bg-white rounded-full border border-gray-200 shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-50 transition-all shrink-0"
-                    onClick={handleAddText}
-                >
-                    <Icon name="Plus" size={28} strokeWidth={1.5} />
-                </button>
+                 {/* Mode Menu Button */}
+                <div className="relative">
+                  <button
+                      className="w-[52px] h-[52px] bg-white rounded-full border border-gray-200 shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-50 transition-all shrink-0"
+                      onClick={() => setIsModeMenuOpen(!isModeMenuOpen)}
+                  >
+                      <Icon name="Menu" size={24} strokeWidth={1.5} />
+                  </button>
 
-                {/* Input Pill */}
-                <div className="flex-1 bg-white h-[68px] rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-gray-200 pl-8 pr-2 flex items-center gap-4 transition-all focus-within:shadow-[0_4px_20px_rgba(133,118,199,0.15)] focus-within:border-[#EADDFF]">
-                    <input 
-                        type="text" 
-                        placeholder="What do you want to create?"
-                        className="flex-1 bg-transparent border-none outline-none text-[19px] text-slate-600 placeholder-slate-400 h-full font-normal"
+                  {/* Mode Dropdown Menu */}
+                  {isModeMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsModeMenuOpen(false)}
+                      />
+                      <div className="absolute bottom-full left-0 mb-2 w-64 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2">
+                        {(Object.keys(MODE_CONFIGS) as AIMode[]).map((mode) => {
+                          const config = MODE_CONFIGS[mode];
+                          const isActive = aiMode === mode;
+                          return (
+                            <button
+                              key={mode}
+                              onClick={() => {
+                                setAiMode(mode);
+                                setIsModeMenuOpen(false);
+                              }}
+                              className={`w-full px-4 py-3 flex items-center gap-3 transition-all ${
+                                isActive
+                                  ? `${config.bgColor} ${config.color}`
+                                  : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className={`w-10 h-10 rounded-full ${isActive ? config.buttonBg : 'bg-gray-100'} flex items-center justify-center shrink-0`}>
+                                <Icon name={config.icon as any} size={20} className={isActive ? config.color : 'text-gray-600'} />
+                              </div>
+                              <div className="flex-1 text-left">
+                                <div className={`font-semibold text-sm ${isActive ? config.color : 'text-gray-900'}`}>
+                                  {config.label}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {config.description}
+                                </div>
+                              </div>
+                              {isActive && (
+                                <Icon name="Check" size={18} className={config.color} />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Input Pill - Styled based on mode */}
+                <div className={`flex-1 ${MODE_CONFIGS[aiMode].bgColor} h-[68px] rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] border-2 ${MODE_CONFIGS[aiMode].borderColor} pl-6 pr-2 flex items-center gap-4 transition-all focus-within:shadow-lg`}>
+                    <div className={`w-10 h-10 rounded-full ${MODE_CONFIGS[aiMode].buttonBg} flex items-center justify-center shrink-0`}>
+                      <Icon name={MODE_CONFIGS[aiMode].icon as any} size={20} className={MODE_CONFIGS[aiMode].color} />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder={MODE_CONFIGS[aiMode].placeholder}
+                        className={`flex-1 bg-transparent border-none outline-none text-[18px] ${MODE_CONFIGS[aiMode].color} placeholder-slate-400 h-full font-normal`}
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
                     />
-                    <button 
+                    <button
                         onClick={handleGenerate}
                         disabled={!prompt}
                         className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shrink-0 ${
-                            prompt 
-                            ? 'bg-[#EADDFF] text-[#4F378B] hover:bg-[#E0CFFF]' 
+                            prompt
+                            ? `${MODE_CONFIGS[aiMode].buttonBg} ${MODE_CONFIGS[aiMode].color} ${MODE_CONFIGS[aiMode].buttonHover}`
                             : 'bg-[#F2F2F2] text-gray-300 cursor-not-allowed'
                         }`}
                     >
@@ -532,6 +809,37 @@ const Editor: React.FC = () => {
             customCards={customCards}
             onCreateCard={handleCreateCard}
         />
+
+        {/* Help Modal */}
+        {showHelpModal && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50"
+              onClick={() => setShowHelpModal(false)}
+            />
+            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md">
+              <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-8 text-center">
+                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Icon name="HelpCircle" size={32} className="text-[#8576C7]" />
+                </div>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-3">
+                  需要帮助？
+                </h2>
+                <p className="text-gray-600 text-lg leading-relaxed mb-6">
+                  企业微信找到 <span className="font-semibold text-[#8576C7]">蔡可豪</span>
+                  <br />
+                  任何需求 <span className="font-semibold text-[#8576C7]">2h 之内回复</span>
+                </p>
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="px-6 py-3 bg-[#8576C7] text-white rounded-full hover:bg-[#7463B8] transition-colors font-medium"
+                >
+                  知道了
+                </button>
+              </div>
+            </div>
+          </>
+        )}
     </div>
   );
 };
