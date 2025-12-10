@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Icon } from '../components/ui/Icon';
 import { CanvasItem } from '../components/CanvasItem';
+import { CardSelector } from '../components/CardSelector';
 import { CanvasElement, Tool, Viewport } from '../types';
-import { MOCK_PROJECTS, INITIAL_VIEWPORT } from '../constants';
+import { MOCK_PROJECTS, INITIAL_VIEWPORT, CardTemplate } from '../constants';
 import { generateImageFromPrompt } from '../services/geminiService';
 
 const Editor: React.FC = () => {
@@ -22,6 +23,7 @@ const Editor: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
+  const [isCardSelectorOpen, setIsCardSelectorOpen] = useState(false);
 
   // Initialize
   useEffect(() => {
@@ -169,6 +171,25 @@ const Editor: React.FC = () => {
     }
   };
 
+  const handleCardSelect = (cardTemplate: CardTemplate) => {
+    const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
+    const newCard: CanvasElement = {
+        id: `card-${Date.now()}`,
+        type: 'card',
+        cardType: cardTemplate.cardType,
+        x: center.x - 150,
+        y: center.y - 200,
+        width: 300,
+        height: 400,
+        content: '',
+        imageContent: cardTemplate.imageContent,
+        textContent: cardTemplate.textContent
+    };
+    setElements(prev => [...prev, newCard]);
+    setSelectedIds(new Set([newCard.id]));
+    setActiveTool('select');
+  };
+
   // AI Generation
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -272,8 +293,15 @@ const Editor: React.FC = () => {
              
              <div className="h-px bg-gray-100 w-full mx-auto" />
 
-             <button 
-                onClick={() => fileInputRef.current?.click()} 
+             <button
+                onClick={() => setIsCardSelectorOpen(true)}
+                className="p-3 rounded-xl hover:bg-gray-50 text-gray-500 transition-all"
+                title="Add Card"
+             >
+                <Icon name="LayoutGrid" size={20} />
+             </button>
+             <button
+                onClick={() => fileInputRef.current?.click()}
                 className="p-3 rounded-xl hover:bg-gray-50 text-gray-500 transition-all"
                 title="Upload Image"
              >
@@ -377,6 +405,13 @@ const Editor: React.FC = () => {
                 </button>
             </div>
         </div>
+
+        {/* Card Selector Modal */}
+        <CardSelector
+            isOpen={isCardSelectorOpen}
+            onClose={() => setIsCardSelectorOpen(false)}
+            onSelect={handleCardSelect}
+        />
     </div>
   );
 };

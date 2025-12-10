@@ -1,4 +1,6 @@
-export type ElementType = 'image' | 'text';
+export type ElementType = 'image' | 'text' | 'card';
+
+export type CardType = 'hook' | 'inspiration' | 'template' | 'product' | 'constraint';
 
 export interface CanvasElement {
   id: string;
@@ -10,6 +12,10 @@ export interface CanvasElement {
   content: string; // URL for image, text content for text
   rotation?: number;
   selected?: boolean;
+  // Card-specific fields
+  cardType?: CardType;
+  imageContent?: string;
+  textContent?: string;
 }
 
 export interface Project {
