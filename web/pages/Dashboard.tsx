@@ -1,10 +1,43 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/ui/Icon';
 import { MOCK_PROJECTS } from '../constants';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userData, setUserData] = useState<{ username: string } | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Check login status on mount
+  useEffect(() => {
+    const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const storedUserData = localStorage.getItem('userData');
+
+    if (loggedIn && storedUserData) {
+      setIsLoggedIn(true);
+      setUserData(JSON.parse(storedUserData));
+    }
+  }, []);
+
+  const handleCreateProject = () => {
+    if (!isLoggedIn) {
+      // Redirect to login page if not logged in
+      navigate('/login');
+      return;
+    }
+
+    // Create project if logged in
+    navigate(`/project/${Date.now()}`);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('userData');
+    setIsLoggedIn(false);
+    setUserData(null);
+    setShowUserMenu(false);
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -15,12 +48,52 @@ const Dashboard: React.FC = () => {
             <span className="px-2 py-0.5 rounded-full border border-gray-300 text-[10px] font-bold text-gray-600 tracking-wider">EXPERIMENT</span>
         </div>
         <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                <Icon name="MoreVertical" className="text-gray-600" />
-            </button>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#EADDFF] to-[#8576C7] overflow-hidden border border-gray-200">
-                <img src="https://picsum.photos/id/64/100/100" alt="User" />
-            </div>
+            {isLoggedIn ? (
+              <>
+                <div className="text-sm text-gray-600">
+                  你好，<span className="font-semibold text-[#8576C7]">{userData?.username}</span>
+                </div>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#EADDFF] to-[#8576C7] overflow-hidden border border-gray-200 flex items-center justify-center text-white font-semibold hover:shadow-md transition-shadow"
+                  >
+                    {userData?.username.charAt(0).toUpperCase()}
+                  </button>
+
+                  {/* User Menu Dropdown */}
+                  {showUserMenu && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowUserMenu(false)}
+                      />
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
+                        <div className="p-3 border-b border-gray-100">
+                          <p className="font-semibold text-gray-900">{userData?.username}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">已登录</p>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                        >
+                          <Icon name="LogOut" size={16} />
+                          退出登录
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <button
+                onClick={() => navigate('/login')}
+                className="flex items-center gap-2 px-4 py-2 bg-[#8576C7] text-white rounded-full hover:bg-[#7463B8] transition-colors text-sm font-medium"
+              >
+                <Icon name="LogIn" size={16} />
+                登录
+              </button>
+            )}
         </div>
       </header>
 
@@ -36,8 +109,8 @@ const Dashboard: React.FC = () => {
 
         {/* Actions */}
         <div className="flex justify-between items-center mb-8">
-            <button 
-                onClick={() => navigate(`/project/${Date.now()}`)}
+            <button
+                onClick={handleCreateProject}
                 className="flex items-center gap-2 bg-[#8576C7] hover:bg-[#7463B8] text-white px-6 py-3 rounded-full font-medium shadow-md transition-all hover:shadow-lg transform active:scale-95"
             >
                 <Icon name="Plus" size={20} />
@@ -53,8 +126,8 @@ const Dashboard: React.FC = () => {
         {/* Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Create New Placeholder Card */}
-            <div 
-                onClick={() => navigate(`/project/${Date.now()}`)}
+            <div
+                onClick={handleCreateProject}
                 className="group cursor-pointer aspect-[4/3] bg-white border border-gray-200 rounded-lg p-6 flex flex-col justify-between hover:border-[#EADDFF] hover:shadow-lg transition-all"
             >
                 <div className="flex-1 border border-dashed border-gray-200 rounded flex items-center justify-center bg-gray-50 group-hover:bg-white transition-colors">
