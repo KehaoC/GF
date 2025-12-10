@@ -25,6 +25,7 @@ const Editor: React.FC = () => {
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
   const [isCardSelectorOpen, setIsCardSelectorOpen] = useState(false);
   const [resizingElement, setResizingElement] = useState<{ id: string; handle: string; startX: number; startY: number; startWidth: number; startHeight: number; startElementX: number; startElementY: number } | null>(null);
+  const [customCards, setCustomCards] = useState<CardTemplate[]>([]);
 
   // Initialize
   useEffect(() => {
@@ -302,6 +303,10 @@ const Editor: React.FC = () => {
     setActiveTool('select');
   };
 
+  const handleCreateCard = (newCard: CardTemplate) => {
+    setCustomCards(prev => [...prev, newCard]);
+  };
+
   // AI Generation
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -524,6 +529,8 @@ const Editor: React.FC = () => {
             isOpen={isCardSelectorOpen}
             onClose={() => setIsCardSelectorOpen(false)}
             onSelect={handleCardSelect}
+            customCards={customCards}
+            onCreateCard={handleCreateCard}
         />
     </div>
   );
