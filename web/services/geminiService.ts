@@ -5,11 +5,43 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KE
 // Gemini 2.5 Flash Image API endpoint
 const GEMINI_IMAGE_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
 
+// Helper function to convert image URL to base64
+const getImageBase64 = async (imageUrl: string): Promise<{ data: string; mimeType: string }> => {
+  // If already a data URL, extract the base64 part
+  if (imageUrl.startsWith('data:')) {
+    const matches = imageUrl.match(/data:([^;]+);base64,(.+)/);
+    if (matches) {
+      return { data: matches[2], mimeType: matches[1] };
+    }
+  }
+
+  // For external URLs, fetch and convert to base64
+  try {
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return { data: base64, mimeType: blob.type || 'image/jpeg' };
+  } catch (error) {
+    console.error('[Gemini AI] Failed to fetch image:', error);
+    throw error;
+  }
+};
+
 export const generateImageFromPrompt = async (
   prompt: string,
   contextImages: CanvasElement[]
 ): Promise<string> => {
   console.log(`[Gemini AI] Generating image for prompt: "${prompt}"`);
+  console.log(`[Gemini AI] Context images: ${contextImages.length} selected elements`);
 
   if (!API_KEY) {
     console.error('[Gemini AI] API Key not found!');
@@ -17,14 +49,48 @@ export const generateImageFromPrompt = async (
   }
 
   try {
+    // Build parts array with multimodal inputs
+    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+    // Add context images from selected elements
+    for (const element of contextImages) {
+      let imageUrl: string | undefined;
+
+      // Extract image URL based on element type
+      if (element.type === 'image') {
+        imageUrl = element.content;
+      } else if (element.type === 'card' && element.imageContent) {
+        imageUrl = element.imageContent;
+      }
+
+      // Convert image to base64 and add to parts
+      if (imageUrl) {
+        try {
+          const { data, mimeType } = await getImageBase64(imageUrl);
+          parts.push({
+            inlineData: {
+              mimeType,
+              data
+            }
+          });
+          console.log(`[Gemini AI] Added context image: ${mimeType}`);
+        } catch (error) {
+          console.warn(`[Gemini AI] Failed to process image from element ${element.id}:`, error);
+        }
+      }
+    }
+
+    // Add text prompt
+    parts.push({ text: prompt });
+
     // Build request body according to official docs
     const requestBody = {
       contents: [{
-        parts: [
-          { text: prompt }
-        ]
+        parts
       }]
     };
+
+    console.log(`[Gemini AI] Sending request with ${parts.length} parts (${parts.length - 1} images + 1 text)`);
 
     // Call Gemini API
     const response = await fetch(`${GEMINI_IMAGE_API_URL}?key=${API_KEY}`, {
