@@ -4,96 +4,110 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Mixboard clone - a visual canvas application for creating collages and mood boards with AI-powered image generation. The project consists of:
+Guru - a visual canvas application for creating collages and mood boards with AI-powered image generation. The project consists of:
 
-- **Frontend**: React + TypeScript + Vite (located in `/web`)
-- **Backend**: FastAPI + Python (to be implemented)
+- **Frontend**: React + TypeScript + Vite (`/web`)
+- **Backend**: FastAPI + Python (`/backend`)
 
 ## Development Commands
 
-All frontend commands should be run from the `/web` directory:
+### Frontend (`/web`)
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server (runs on http://localhost:3000)
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+npm install          # Install dependencies
+npm run dev          # Start dev server (http://localhost:3000)
+npm run build        # Build for production
+npm run preview      # Preview production build
 ```
+
+### Backend (`/backend`)
+
+```bash
+pip install -r requirements.txt   # Install dependencies
+python run.py                     # Start dev server (http://localhost:8000)
+```
+
+API docs available at `http://localhost:8000/api/v1/docs`
 
 ## Architecture
 
 ### Frontend Structure (`/web`)
 
-The app uses **HashRouter** for client-side routing with two main pages:
-
+Uses **HashRouter** with two main pages:
 1. **Dashboard** (`/`) - Project gallery view
-2. **Editor** (`/project/:id`) - Canvas workspace for editing projects
-
-### Key Architectural Patterns
+2. **Editor** (`/project/:id`) - Canvas workspace
 
 **State Management**:
 - Local component state with React hooks (no Redux/Context)
 - `elements` array holds all canvas items (images, text)
-- `viewport` object manages pan/zoom state `{x, y, scale}`
+- `viewport` object manages pan/zoom `{x, y, scale}`
 - `selectedIds` Set tracks multi-selection
 
 **Canvas Coordinate System**:
-- The `screenToCanvas()` function converts screen coordinates to canvas space accounting for viewport pan/zoom
+- `screenToCanvas()` converts screen coordinates to canvas space
 - All element positions are in canvas coordinates, not screen pixels
-- Transform is applied via CSS: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`
+- Transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`
 
 **Element Interaction**:
-- Click on canvas background deselects all
-- Shift+click toggles element selection
-- Drag while `activeTool === 'select'` moves elements
+- Click background deselects all; Shift+click toggles selection
+- Drag with `activeTool === 'select'` moves elements
 - Middle mouse or Hand tool enables panning
 - Ctrl/Cmd+scroll for zoom
 
 **AI Integration** (`services/geminiService.ts`):
-- Currently uses mock implementation returning random Picsum images
-- Real implementation should use `@google/genai` SDK
-- API key injected via Vite's `define` from `GEMINI_API_KEY` env var
-- Functions: `generateImageFromPrompt()` and `transformElement()`
+- Mock implementation returning random Picsum images
+- Real implementation uses `@google/genai` SDK
+- Functions: `generateImageFromPrompt()`, `transformElement()`
 
-### Type System (`types.ts`)
+### Backend Structure (`/backend`)
 
-Core types:
-- `CanvasElement` - Base canvas item (image or text)
-- `Project` - Container for elements with metadata
-- `Viewport` - Pan/zoom state
-- `Tool` - Active tool type ('select' | 'hand' | 'text')
+Standard FastAPI layered architecture:
 
-### Important Implementation Details
+```
+app/
+├── api/v1/           # Route handlers (auth, projects, users)
+├── core/             # Security (JWT, bcrypt) and dependencies
+├── models/           # SQLAlchemy ORM models
+├── schemas/          # Pydantic request/response schemas
+├── config.py         # Settings via pydantic-settings
+├── database.py       # SQLAlchemy engine and session
+└── main.py           # FastAPI app initialization
+```
 
-**Vite Configuration**:
-- Dev server runs on port 3000 (not default 5173)
-- Exposes API key as both `process.env.API_KEY` and `process.env.GEMINI_API_KEY`
-- Uses path alias `@` for root directory
+**Key Patterns**:
+- JWT authentication via `python-jose`, passwords hashed with `bcrypt`
+- `get_current_user` dependency in `core/deps.py` extracts user from Bearer token
+- Project `elements` stored as JSON column (mirrors frontend `CanvasElement[]`)
+- All routes prefixed with `/api/v1`
 
-**Styling**:
-- Tailwind CSS via CDN (configured in `index.html`)
-- Custom theme colors: `mix.bg`, `mix.accent`, etc.
-- Dot grid background pattern defined in inline styles
+**API Endpoints**:
+- Auth: `POST /auth/register`, `POST /auth/login`
+- Users: `GET /users/me`, `PUT /users/me`
+- Projects: CRUD at `/projects/`, plus `GET /projects/examples`
 
-**Data Persistence**:
-- Currently using `MOCK_PROJECTS` constant (no real persistence)
-- Backend API integration pending
+**Database**:
+- SQLite by default (`guru.db`), configurable via `DATABASE_URL`
+- Tables auto-created on startup via `Base.metadata.create_all()`
 
 ## Environment Setup
 
-Create `.env.local` in the `/web` directory:
-
+### Frontend (`/web/.env.local`)
 ```
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-## AI Studio Integration
+### Backend (`/backend/.env`)
+```
+SECRET_KEY=your-secret-key-here
+DATABASE_URL=sqlite:///./guru.db
+```
 
-This app is designed to work with Google AI Studio. See the web README for the studio link.
+## Type System
+
+**Frontend** (`types.ts`):
+- `CanvasElement` - Base canvas item (image or text)
+- `Project` - Container for elements with metadata
+- `Viewport` - Pan/zoom state
+- `Tool` - 'select' | 'hand' | 'text'
+
+**Backend** - Pydantic schemas mirror frontend types; `Project.elements` is `List[dict]` (JSON)
