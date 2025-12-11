@@ -18,3 +18,4 @@ class User(Base):
 
     # Relationships
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
+    custom_cards = relationship("CustomCard", back_populates="owner", cascade="all, delete-orphan")

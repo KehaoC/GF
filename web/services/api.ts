@@ -231,3 +231,50 @@ export const projectsAPI = {
     });
   },
 };
+
+// ============================================================
+// 自定义卡片 API
+// ============================================================
+
+export interface BackendCustomCard {
+  id: number;
+  card_type: string;
+  image_url: string;
+  text_content: string | null;
+  owner_id: number;
+  created_at: string;
+}
+
+export interface CustomCardCreateRequest {
+  card_type: string;
+  image_url: string;
+  text_content?: string;
+}
+
+export const cardsAPI = {
+  /**
+   * 获取用户的所有自定义卡片
+   */
+  async list(): Promise<BackendCustomCard[]> {
+    return request<BackendCustomCard[]>('/cards/');
+  },
+
+  /**
+   * 创建新的自定义卡片
+   */
+  async create(data: CustomCardCreateRequest): Promise<BackendCustomCard> {
+    return request<BackendCustomCard>('/cards/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * 删除自定义卡片
+   */
+  async delete(id: number): Promise<void> {
+    await request<void>(`/cards/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};

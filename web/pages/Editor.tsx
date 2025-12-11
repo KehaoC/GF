@@ -7,7 +7,8 @@ import { TaskPanel, GenerationTask, TaskStatus } from '../components/TaskPanel';
 import { CanvasElement, Tool, Viewport } from '../types';
 import { INITIAL_VIEWPORT, CardTemplate, CARD_LIBRARY } from '../constants';
 import { generateImageFromPrompt } from '../services/geminiService';
-import { projectsAPI } from '../services/api';
+import { projectsAPI, cardsAPI, BackendCustomCard } from '../services/api';
+import { uploadBase64 } from '../services/fileService';
 
 type AIMode = 'generate' | 'inspire';
 
@@ -66,6 +67,7 @@ const Editor: React.FC = () => {
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
   const [isCardSelectorOpen, setIsCardSelectorOpen] = useState(false);
   const [resizingElement, setResizingElement] = useState<{ id: string; handle: string; startX: number; startY: number; startWidth: number; startHeight: number; startElementX: number; startElementY: number } | null>(null);
+  // 自定义卡片（从后端加载）
   const [customCards, setCustomCards] = useState<CardTemplate[]>([]);
   const [aiMode, setAiMode] = useState<AIMode>('generate');
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
@@ -113,6 +115,27 @@ const Editor: React.FC = () => {
 
     loadProject();
   }, [id, navigate]);
+
+  // Load custom cards from backend
+  useEffect(() => {
+    const loadCustomCards = async () => {
+      try {
+        const backendCards = await cardsAPI.list();
+        // 转换为 CardTemplate 格式
+        const cards: CardTemplate[] = backendCards.map((card: BackendCustomCard) => ({
+          id: card.id.toString(),
+          cardType: card.card_type as CardTemplate['cardType'],
+          imageContent: card.image_url,
+          textContent: card.text_content || undefined,
+        }));
+        setCustomCards(cards);
+      } catch (error) {
+        console.error('Failed to load custom cards:', error);
+      }
+    };
+
+    loadCustomCards();
+  }, []);
 
   // Keyboard Event Handler
   useEffect(() => {
@@ -623,8 +646,38 @@ const Editor: React.FC = () => {
     setActiveTool('select');
   };
 
-  const handleCreateCard = (newCard: CardTemplate) => {
-    setCustomCards(prev => [...prev, newCard]);
+  const handleCreateCard = async (newCard: CardTemplate) => {
+    try {
+      // 调用后端 API 创建卡片
+      const backendCard = await cardsAPI.create({
+        card_type: newCard.cardType,
+        image_url: newCard.imageContent || '',
+        text_content: newCard.textContent,
+      });
+      // 转换为前端格式并添加到状态
+      const createdCard: CardTemplate = {
+        id: backendCard.id.toString(),
+        cardType: backendCard.card_type as CardTemplate['cardType'],
+        imageContent: backendCard.image_url,
+        textContent: backendCard.text_content || undefined,
+      };
+      setCustomCards(prev => [...prev, createdCard]);
+    } catch (error) {
+      console.error('Failed to create card:', error);
+      alert('创建卡片失败，请重试');
+    }
+  };
+
+  const handleDeleteCard = async (cardId: string) => {
+    try {
+      // 调用后端 API 删除卡片
+      await cardsAPI.delete(parseInt(cardId, 10));
+      // 从状态中移除
+      setCustomCards(prev => prev.filter(card => card.id !== cardId));
+    } catch (error) {
+      console.error('Failed to delete card:', error);
+      alert('删除卡片失败，请重试');
+    }
   };
 
   const handleExport = async () => {
@@ -1083,6 +1136,7 @@ const Editor: React.FC = () => {
             onSelect={handleCardSelect}
             customCards={customCards}
             onCreateCard={handleCreateCard}
+            onDeleteCard={handleDeleteCard}
         />
 
         {/* Help Modal */}

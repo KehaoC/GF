@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import engine, Base
@@ -7,6 +9,9 @@ from app.api.v1 import api_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Ensure uploads directory exists
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 # Initialize FastAPI app
 app = FastAPI(

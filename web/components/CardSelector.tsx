@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { CardType } from '../types';
 import { CardTemplate, CARD_LIBRARY } from '../constants';
 import { Icon } from './ui/Icon';
+import { uploadFile } from '../services/fileService';
 
 interface CardOption {
   type: CardType;
@@ -55,16 +56,19 @@ interface CardSelectorProps {
   onSelect: (card: CardTemplate) => void;
   customCards?: CardTemplate[];
   onCreateCard?: (card: CardTemplate) => void;
+  onDeleteCard?: (cardId: string) => void;
 }
 
-export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onSelect, customCards = [], onCreateCard }) => {
+export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onSelect, customCards = [], onCreateCard, onDeleteCard }) => {
   const [activeTab, setActiveTab] = useState<CardType>('hook');
   const [selectedCard, setSelectedCard] = useState<CardTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newCardType, setNewCardType] = useState<CardType>('hook');
-  const [newCardTitle, setNewCardTitle] = useState('');
-  const [newCardImage, setNewCardImage] = useState('');
+  const [newCardImagePreview, setNewCardImagePreview] = useState(''); // 用于预览的 base64
+  const [newCardImageFile, setNewCardImageFile] = useState<File | null>(null); // 实际要上传的文件
   const [newCardText, setNewCardText] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -85,45 +89,79 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
 
   const resetCreateForm = () => {
     setNewCardType('hook');
-    setNewCardTitle('');
-    setNewCardImage('');
+    setNewCardImagePreview('');
+    setNewCardImageFile(null);
     setNewCardText('');
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setNewCardImageFile(file);
+      // 创建预览
       const reader = new FileReader();
       reader.onload = (ev) => {
-        setNewCardImage(ev.target?.result as string);
+        setNewCardImagePreview(ev.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleCreateCard = () => {
-    if (!newCardTitle || !newCardImage || !newCardText) {
-      alert('请填写所有字段');
+  const handleCreateCard = async () => {
+    if (!newCardImageFile) {
+      alert('请上传图片');
       return;
     }
 
-    const newCard: CardTemplate = {
-      id: `custom-${Date.now()}`,
-      cardType: newCardType,
-      title: newCardTitle,
-      imageContent: newCardImage,
-      textContent: newCardText
-    };
+    setIsUploading(true);
 
-    if (onCreateCard) {
-      onCreateCard(newCard);
+    try {
+      // 上传图片到服务器
+      const imageUrl = await uploadFile(newCardImageFile);
+
+      const newCard: CardTemplate = {
+        id: `custom-${Date.now()}`,
+        cardType: newCardType,
+        title: newCardText ? newCardText.substring(0, 20) : '自定义卡片',
+        imageContent: imageUrl,
+        textContent: newCardText || ''
+      };
+
+      if (onCreateCard) {
+        onCreateCard(newCard);
+      }
+
+      // Switch to the tab of the created card and close the create form
+      setActiveTab(newCardType);
+      setIsCreating(false);
+      resetCreateForm();
+    } catch (error: any) {
+      alert(error.message || '上传失败');
+    } finally {
+      setIsUploading(false);
     }
-
-    // Switch to the tab of the created card and close the create form
-    setActiveTab(newCardType);
-    setIsCreating(false);
-    resetCreateForm();
   };
+
+  const handleDeleteCard = (cardId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (deleteConfirmId === cardId) {
+      // 确认删除
+      if (onDeleteCard) {
+        onDeleteCard(cardId);
+      }
+      setDeleteConfirmId(null);
+      if (selectedCard?.id === cardId) {
+        setSelectedCard(null);
+      }
+    } else {
+      // 显示确认按钮
+      setDeleteConfirmId(cardId);
+    }
+  };
+
+  // 判断卡片是否是自定义卡片（可删除）
+  // 检查卡片是否在 customCards 列表中
+  const isCustomCard = (cardId: string) => customCards.some(card => card.id === cardId);
 
   // Merge library cards with custom cards
   const libraryCards = CARD_LIBRARY[activeTab];
@@ -207,15 +245,29 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {cardsInLibrary.map((card) => (
-                    <button
+                    <div
                       key={card.id}
                       onClick={() => setSelectedCard(card)}
-                      className={`p-3 rounded-xl border-2 transition-all text-left ${
+                      className={`relative p-3 rounded-xl border-2 transition-all text-left cursor-pointer group ${
                         selectedCard?.id === card.id
                           ? 'border-[#8576C7] bg-purple-50 shadow-md scale-105'
                           : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                       }`}
                     >
+                      {/* Delete Button for custom cards */}
+                      {isCustomCard(card.id) && (
+                        <button
+                          onClick={(e) => handleDeleteCard(card.id, e)}
+                          className={`absolute top-1 right-1 z-10 p-1.5 rounded-full transition-all ${
+                            deleteConfirmId === card.id
+                              ? 'bg-red-500 text-white'
+                              : 'bg-black/50 text-white opacity-0 group-hover:opacity-100'
+                          }`}
+                          title={deleteConfirmId === card.id ? '点击确认删除' : '删除卡片'}
+                        >
+                          <Icon name={deleteConfirmId === card.id ? 'Check' : 'Trash2'} size={14} />
+                        </button>
+                      )}
                       {/* Card Preview */}
                       <div className="aspect-[3/2] rounded-lg overflow-hidden mb-2 bg-gray-100">
                         <img
@@ -224,13 +276,12 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                           className="w-full h-full object-cover"
                         />
                       </div>
-                      <h4 className="font-semibold text-sm text-gray-900 mb-1 truncate">
-                        {card.title}
-                      </h4>
-                      <p className="text-xs text-gray-600 line-clamp-2">
-                        {card.textContent}
-                      </p>
-                    </button>
+                      {card.textContent && (
+                        <p className="text-xs text-gray-600 line-clamp-2">
+                          {card.textContent}
+                        </p>
+                      )}
+                    </div>
                   ))}
 
                   {cardsInLibrary.length === 0 && (
@@ -300,35 +351,24 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                     </div>
                   </div>
 
-                  {/* Card Title */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      卡片标题
-                    </label>
-                    <input
-                      type="text"
-                      value={newCardTitle}
-                      onChange={(e) => setNewCardTitle(e.target.value)}
-                      placeholder="输入卡片标题..."
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8576C7] focus:border-transparent"
-                    />
-                  </div>
-
                   {/* Image Upload */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       卡片图片
                     </label>
                     <div className="space-y-3">
-                      {newCardImage ? (
+                      {newCardImagePreview ? (
                         <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-gray-200">
                           <img
-                            src={newCardImage}
+                            src={newCardImagePreview}
                             alt="Preview"
                             className="w-full h-full object-cover"
                           />
                           <button
-                            onClick={() => setNewCardImage('')}
+                            onClick={() => {
+                              setNewCardImagePreview('');
+                              setNewCardImageFile(null);
+                            }}
                             className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
                           >
                             <Icon name="X" size={16} />
@@ -357,13 +397,13 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                   {/* Card Text */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      卡片描述
+                      卡片描述 <span className="text-gray-400 font-normal">(可选)</span>
                     </label>
                     <textarea
                       value={newCardText}
                       onChange={(e) => setNewCardText(e.target.value)}
                       placeholder="输入卡片描述文本..."
-                      rows={6}
+                      rows={4}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8576C7] focus:border-transparent resize-none"
                     />
                   </div>
@@ -384,14 +424,17 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                 </button>
                 <button
                   onClick={handleCreateCard}
-                  disabled={!newCardTitle || !newCardImage || !newCardText}
-                  className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    newCardTitle && newCardImage && newCardText
+                  disabled={!newCardImageFile || isUploading}
+                  className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                    newCardImageFile && !isUploading
                       ? 'bg-[#8576C7] text-white hover:bg-[#7463B8]'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  创建并添加
+                  {isUploading && (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  )}
+                  {isUploading ? '上传中...' : '创建卡片'}
                 </button>
               </div>
             </>

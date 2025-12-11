@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:3001"]
 
+    # File Upload
+    UPLOAD_DIR: str = "./uploads"
+    MAX_FILE_SIZE: int = 30 * 1024 * 1024  # 10MB
+    ALLOWED_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "gif", "webp"]
+
     class Config:
         env_file = ".env"
         case_sensitive = True
