@@ -4,8 +4,9 @@ import { Icon } from '../components/ui/Icon';
 import { CanvasItem } from '../components/CanvasItem';
 import { CardSelector } from '../components/CardSelector';
 import { CanvasElement, Tool, Viewport } from '../types';
-import { MOCK_PROJECTS, INITIAL_VIEWPORT, CardTemplate, CARD_LIBRARY } from '../constants';
+import { INITIAL_VIEWPORT, CardTemplate, CARD_LIBRARY } from '../constants';
 import { generateImageFromPrompt } from '../services/geminiService';
+import { projectsAPI } from '../services/api';
 
 type AIMode = 'generate' | 'inspire';
 
@@ -71,14 +72,36 @@ const Editor: React.FC = () => {
   const [isSelecting, setIsSelecting] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
 
-  // Initialize
+  // 新增：项目加载和保存状态
+  const [isLoadingProject, setIsLoadingProject] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [projectTitle, setProjectTitle] = useState('Untitled');
+
+  // Initialize - Load project from backend
   useEffect(() => {
-    // Simulate fetching project
-    const project = MOCK_PROJECTS.find(p => p.id === id);
-    if (project) {
-      setElements(project.elements);
-    }
-  }, [id]);
+    const loadProject = async () => {
+      if (!id) {
+        navigate('/');
+        return;
+      }
+
+      setIsLoadingProject(true);
+      try {
+        const project = await projectsAPI.get(id);
+        setElements(project.elements || []);
+        setProjectTitle(project.title);
+        setSaveStatus('saved');
+      } catch (error: any) {
+        console.error('Failed to load project:', error);
+        alert(error.message || '项目加载失败');
+        navigate('/');
+      } finally {
+        setIsLoadingProject(false);
+      }
+    };
+
+    loadProject();
+  }, [id, navigate]);
 
   // Keyboard Event Handler
   useEffect(() => {
@@ -114,6 +137,30 @@ const Editor: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedIds]);
+
+  // Auto-save: Debounce 2 秒后自动保存
+  useEffect(() => {
+    // 跳过初始加载和空项目
+    if (isLoadingProject || !id) return;
+
+    // 标记为未保存
+    setSaveStatus('unsaved');
+
+    // 设置 2 秒延迟保存
+    const timer = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        await projectsAPI.update(id, { elements });
+        setSaveStatus('saved');
+      } catch (error: any) {
+        console.error('Auto-save failed:', error);
+        setSaveStatus('unsaved');
+      }
+    }, 2000);
+
+    // 清理定时器
+    return () => clearTimeout(timer);
+  }, [elements, id, isLoadingProject]);
 
   // Coordinate Conversion
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -557,6 +604,18 @@ const Editor: React.FC = () => {
     }
   };
 
+  // Loading state
+  if (isLoadingProject) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#F9FAFB]">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-[#8576C7]/30 border-t-[#8576C7] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">加载项目中...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#F9FAFB] flex flex-col relative text-slate-800">
         
@@ -573,7 +632,7 @@ const Editor: React.FC = () => {
                 
                 {/* Project Title Pill */}
                 <div className="flex items-center h-10 bg-[#F0F4F9] rounded-full px-4 border border-transparent hover:border-gray-300 transition-colors">
-                   <span className="text-[15px] font-medium text-gray-700">Untitled</span>
+                   <span className="text-[15px] font-medium text-gray-700">{projectTitle}</span>
                    <div className="w-px h-4 bg-gray-300 mx-3" />
                    <Icon name="Maximize" size={14} className="text-gray-500 cursor-pointer hover:text-gray-800" />
                 </div>
@@ -581,6 +640,28 @@ const Editor: React.FC = () => {
             
             {/* Right Section */}
             <div className="flex items-center gap-3 pointer-events-auto mt-2">
+                 {/* Save Status Indicator */}
+                 <div className="flex items-center gap-2 px-4 h-10 bg-[#F0F4F9] rounded-full">
+                   {saveStatus === 'saved' && (
+                     <>
+                       <Icon name="Check" size={16} className="text-green-600" />
+                       <span className="text-[13px] font-medium text-green-700">已保存</span>
+                     </>
+                   )}
+                   {saveStatus === 'saving' && (
+                     <>
+                       <div className="w-4 h-4 border-2 border-[#8576C7]/30 border-t-[#8576C7] rounded-full animate-spin" />
+                       <span className="text-[13px] font-medium text-gray-600">保存中...</span>
+                     </>
+                   )}
+                   {saveStatus === 'unsaved' && (
+                     <>
+                       <Icon name="Clock" size={16} className="text-orange-500" />
+                       <span className="text-[13px] font-medium text-orange-600">未保存</span>
+                     </>
+                   )}
+                 </div>
+
                  <button
                     onClick={handleExport}
                     className="flex items-center gap-2 px-5 h-10 text-[14px] font-medium text-gray-800 bg-[#F0F4F9] hover:bg-gray-200 rounded-full transition-colors"

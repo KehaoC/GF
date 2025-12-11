@@ -1,34 +1,73 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/ui/Icon';
-import { MOCK_PROJECTS } from '../constants';
+import { projectsAPI } from '../services/api';
+import type { Project } from '../types';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userData, setUserData] = useState<{ username: string } | null>(null);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-
-  // Check login status on mount
-  useEffect(() => {
-    const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+  // 初始化时直接从 localStorage 读取登录状态，避免竞态条件
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('isLoggedIn') === 'true';
+  });
+  const [userData, setUserData] = useState<{ username: string } | null>(() => {
     const storedUserData = localStorage.getItem('userData');
+    return storedUserData ? JSON.parse(storedUserData) : null;
+  });
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
-    if (loggedIn && storedUserData) {
-      setIsLoggedIn(true);
-      setUserData(JSON.parse(storedUserData));
-    }
-  }, []);
+  // Load projects from backend
+  useEffect(() => {
+    const loadProjects = async () => {
+      setIsLoadingProjects(true);
+      try {
+        if (!isLoggedIn) {
+          // 未登录只显示示例项目
+          const examples = await projectsAPI.listExamples();
+          setProjects(examples);
+        } else {
+          // 已登录：并行加载用户项目和示例项目
+          const [userProjects, examples] = await Promise.all([
+            projectsAPI.list(),
+            projectsAPI.listExamples()
+          ]);
+          // 合并项目：用户项目在前，示例项目在后
+          setProjects([...userProjects, ...examples]);
+        }
+      } catch (error) {
+        console.error('Failed to load projects:', error);
+        // 加载失败时显示空列表
+        setProjects([]);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    };
 
-  const handleCreateProject = () => {
+    loadProjects();
+  }, [isLoggedIn]);
+
+  const handleCreateProject = async () => {
     if (!isLoggedIn) {
       // Redirect to login page if not logged in
       navigate('/login');
       return;
     }
 
-    // Create project if logged in
-    navigate(`/project/${Date.now()}`);
+    try {
+      // 调用 API 创建新项目
+      const newProject = await projectsAPI.create({
+        title: 'Untitled',
+        thumbnail: '',
+        elements: []
+      });
+
+      // 跳转到编辑器
+      navigate(`/project/${newProject.id}`);
+    } catch (error: any) {
+      alert(error.message || '创建项目失败');
+    }
   };
 
   const handleLogout = () => {
@@ -139,7 +178,15 @@ const Dashboard: React.FC = () => {
                 </div>
             </div>
 
-            {MOCK_PROJECTS.map((project) => (
+            {/* Loading State */}
+            {isLoadingProjects && (
+                <div className="col-span-full flex items-center justify-center py-12">
+                    <div className="w-8 h-8 border-2 border-[#8576C7]/30 border-t-[#8576C7] rounded-full animate-spin" />
+                </div>
+            )}
+
+            {/* Projects */}
+            {!isLoadingProjects && projects.map((project) => (
                 <div 
                     key={project.id}
                     onClick={() => navigate(`/project/${project.id}`)}
@@ -181,7 +228,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         <footer className="mt-32 border-t border-gray-200 pt-8 flex justify-between items-center text-sm text-gray-500">
-            <div className="text-lg font-medium text-gray-400">Google</div>
+            <div className="text-lg font-medium text-gray-400">Guru Game</div>
             <div className="flex gap-6">
                 <a href="#" className="hover:text-gray-800">Privacy</a>
                 <a href="#" className="hover:text-gray-800">Terms of Service</a>
