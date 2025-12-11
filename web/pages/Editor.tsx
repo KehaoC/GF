@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Icon } from '../components/ui/Icon';
 import { CanvasItem } from '../components/CanvasItem';
 import { CardSelector } from '../components/CardSelector';
+import { TaskPanel, GenerationTask, TaskStatus } from '../components/TaskPanel';
 import { CanvasElement, Tool, Viewport } from '../types';
 import { INITIAL_VIEWPORT, CardTemplate, CARD_LIBRARY } from '../constants';
 import { generateImageFromPrompt } from '../services/geminiService';
@@ -71,6 +72,11 @@ const Editor: React.FC = () => {
   const [selectionRect, setSelectionRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // 任务队列状态
+  const [tasks, setTasks] = useState<GenerationTask[]>([]);
+  const [isTaskPanelExpanded, setIsTaskPanelExpanded] = useState(false);
+  const isProcessingRef = useRef(false);
 
   // 新增：项目加载和保存状态
   const [isLoadingProject, setIsLoadingProject] = useState(true);
@@ -161,6 +167,138 @@ const Editor: React.FC = () => {
     // 清理定时器
     return () => clearTimeout(timer);
   }, [elements, id, isLoadingProject]);
+
+  // 更新任务状态的辅助函数
+  const updateTask = useCallback((taskId: string, updates: Partial<GenerationTask>) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+  }, []);
+
+  // 处理任务队列
+  const processNextTask = useCallback(async () => {
+    if (isProcessingRef.current) return;
+
+    const pendingTask = tasks.find(t => t.status === 'pending');
+    if (!pendingTask) return;
+
+    isProcessingRef.current = true;
+
+    // 更新任务状态为运行中
+    updateTask(pendingTask.id, { status: 'running', progress: 10 });
+
+    try {
+      // 模拟进度更新
+      const progressInterval = setInterval(() => {
+        setTasks(prev => {
+          const task = prev.find(t => t.id === pendingTask.id);
+          if (task && task.status === 'running' && task.progress < 90) {
+            return prev.map(t =>
+              t.id === pendingTask.id
+                ? { ...t, progress: Math.min(90, t.progress + Math.random() * 15) }
+                : t
+            );
+          }
+          return prev;
+        });
+      }, 500);
+
+      // 获取选中的元素作为上下文
+      const contextElements = elements.filter(el => selectedIds.has(el.id));
+      const newImageUrl = await generateImageFromPrompt(pendingTask.prompt, contextElements);
+
+      clearInterval(progressInterval);
+
+      // 计算新元素位置
+      let startX = 0, startY = 0;
+      if (contextElements.length > 0) {
+        startX = contextElements[0].x + contextElements[0].width + 20;
+        startY = contextElements[0].y;
+      } else {
+        const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
+        startX = center.x;
+        startY = center.y;
+      }
+
+      // 创建新元素
+      const newEl: CanvasElement = {
+        id: `ai-${Date.now()}`,
+        type: 'image',
+        x: startX,
+        y: startY,
+        width: 400,
+        height: 400,
+        content: newImageUrl
+      };
+
+      setElements(prev => [...prev, newEl]);
+
+      // 更新任务为完成
+      updateTask(pendingTask.id, {
+        status: 'completed',
+        progress: 100,
+        resultImageUrl: newImageUrl
+      });
+
+    } catch (error) {
+      console.error('Task failed:', error);
+      updateTask(pendingTask.id, {
+        status: 'failed',
+        progress: 0,
+        error: error instanceof Error ? error.message : '生成失败'
+      });
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, [tasks, elements, selectedIds, updateTask]);
+
+  // 监听任务队列变化，自动处理下一个任务
+  useEffect(() => {
+    const hasPendingTasks = tasks.some(t => t.status === 'pending');
+    const hasRunningTasks = tasks.some(t => t.status === 'running');
+
+    if (hasPendingTasks && !hasRunningTasks) {
+      processNextTask();
+    }
+
+    // 当有新任务时自动展开面板
+    if (tasks.length > 0 && tasks.some(t => t.status === 'pending' || t.status === 'running')) {
+      setIsTaskPanelExpanded(true);
+    }
+  }, [tasks, processNextTask]);
+
+  // 添加任务到队列
+  const addTaskToQueue = useCallback((prompt: string) => {
+    const newTask: GenerationTask = {
+      id: `task-${Date.now()}`,
+      prompt,
+      status: 'pending',
+      progress: 0,
+      createdAt: Date.now(),
+    };
+    setTasks(prev => [...prev, newTask]);
+    setIsTaskPanelExpanded(true);
+  }, []);
+
+  // 清除已完成的任务
+  const clearCompletedTasks = useCallback(() => {
+    setTasks(prev => prev.filter(t => t.status !== 'completed' && t.status !== 'failed'));
+  }, []);
+
+  // 点击任务时选中对应的生成结果
+  const handleTaskClick = useCallback((task: GenerationTask) => {
+    if (task.status === 'completed' && task.resultImageUrl) {
+      // 找到对应的元素并选中
+      const element = elements.find(el => el.content === task.resultImageUrl);
+      if (element) {
+        setSelectedIds(new Set([element.id]));
+        // 将视口移动到元素位置
+        setViewport(prev => ({
+          ...prev,
+          x: window.innerWidth / 2 - element.x * prev.scale - element.width * prev.scale / 2,
+          y: window.innerHeight / 2 - element.y * prev.scale - element.height * prev.scale / 2,
+        }));
+      }
+    }
+  }, [elements]);
 
   // Coordinate Conversion
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -512,11 +650,10 @@ const Editor: React.FC = () => {
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    setIsGenerating(true);
-
-    try {
-        if (aiMode === 'inspire') {
-            // Inspire Mode: Generate multiple Inspiration Cards
+    if (aiMode === 'inspire') {
+        // Inspire Mode: Generate multiple Inspiration Cards (保持原有的同步逻辑)
+        setIsGenerating(true);
+        try {
             const inspirationCards = CARD_LIBRARY.inspiration;
 
             // Randomly select 3-5 cards
@@ -567,40 +704,15 @@ const Editor: React.FC = () => {
             setElements(prev => [...prev, ...newCards]);
             setSelectedIds(new Set(newCards.map(c => c.id)));
             setPrompt('');
-
-        } else {
-            // Generate Mode: AI Image Generation
-            const selectedElements = elements.filter(el => selectedIds.has(el.id));
-            const newImageUrl = await generateImageFromPrompt(prompt, selectedElements);
-
-            let startX = 0, startY = 0;
-            if (selectedElements.length > 0) {
-                startX = selectedElements[0].x + selectedElements[0].width + 20;
-                startY = selectedElements[0].y;
-            } else {
-                 const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
-                 startX = center.x;
-                 startY = center.y;
-            }
-
-            const newEl: CanvasElement = {
-                id: `ai-${Date.now()}`,
-                type: 'image',
-                x: startX,
-                y: startY,
-                width: 400,
-                height: 400,
-                content: newImageUrl
-            };
-
-            setElements(prev => [...prev, newEl]);
-            setSelectedIds(new Set([newEl.id]));
-            setPrompt('');
+        } catch (error) {
+            console.error("Generation failed", error);
+        } finally {
+            setIsGenerating(false);
         }
-    } catch (error) {
-        console.error("Generation failed", error);
-    } finally {
-        setIsGenerating(false);
+    } else {
+        // Generate Mode: 使用任务队列，支持批量生图
+        addTaskToQueue(prompt);
+        setPrompt('');
     }
   };
 
@@ -721,6 +833,15 @@ const Editor: React.FC = () => {
              </button>
              <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
         </div>
+
+        {/* Right Task Panel */}
+        <TaskPanel
+          tasks={tasks}
+          isExpanded={isTaskPanelExpanded}
+          onToggleExpand={() => setIsTaskPanelExpanded(prev => !prev)}
+          onTaskClick={handleTaskClick}
+          onClearCompleted={clearCompletedTasks}
+        />
 
         {/* Canvas Area */}
         <div 
