@@ -57,6 +57,10 @@ htmlcov/
 *.db
 *.sqlite3
 
+# Uploaded files (keep .gitkeep)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
 # Distribution / packaging
 .Python
 build/
