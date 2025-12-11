@@ -40,6 +40,7 @@ class ProjectListResponse(BaseModel):
     title: str
     thumbnail: Optional[str] = None
     is_example: bool
+    elements: List[Any] = []
     created_at: datetime
     updated_at: datetime
 

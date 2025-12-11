@@ -83,6 +83,11 @@ const Editor: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [projectTitle, setProjectTitle] = useState('Untitled');
 
+  // 标题编辑状态
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitle, setEditingTitle] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
   // Initialize - Load project from backend
   useEffect(() => {
     const loadProject = async () => {
@@ -299,6 +304,50 @@ const Editor: React.FC = () => {
       }
     }
   }, [elements]);
+
+  // 开始编辑标题
+  const handleStartEditTitle = useCallback(() => {
+    setEditingTitle(projectTitle);
+    setIsEditingTitle(true);
+    // 延迟聚焦，等待 input 渲染
+    setTimeout(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }, 0);
+  }, [projectTitle]);
+
+  // 保存标题
+  const handleSaveTitle = useCallback(async () => {
+    const newTitle = editingTitle.trim();
+    if (!newTitle || newTitle === projectTitle) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    try {
+      await projectsAPI.update(id!, { title: newTitle });
+      setProjectTitle(newTitle);
+    } catch (error) {
+      console.error('Failed to update title:', error);
+    }
+    setIsEditingTitle(false);
+  }, [editingTitle, projectTitle, id]);
+
+  // 取消编辑标题
+  const handleCancelEditTitle = useCallback(() => {
+    setIsEditingTitle(false);
+    setEditingTitle('');
+  }, []);
+
+  // 处理标题输入框的键盘事件
+  const handleTitleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveTitle();
+    } else if (e.key === 'Escape') {
+      handleCancelEditTitle();
+    }
+  }, [handleSaveTitle, handleCancelEditTitle]);
 
   // Coordinate Conversion
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -744,9 +793,33 @@ const Editor: React.FC = () => {
                 
                 {/* Project Title Pill */}
                 <div className="flex items-center h-10 bg-[#F0F4F9] rounded-full px-4 border border-transparent hover:border-gray-300 transition-colors">
-                   <span className="text-[15px] font-medium text-gray-700">{projectTitle}</span>
+                   {isEditingTitle ? (
+                     <input
+                       ref={titleInputRef}
+                       type="text"
+                       value={editingTitle}
+                       onChange={(e) => setEditingTitle(e.target.value)}
+                       onKeyDown={handleTitleKeyDown}
+                       onBlur={handleSaveTitle}
+                       className="text-[15px] font-medium text-gray-700 bg-transparent outline-none border-none w-40"
+                       placeholder="项目名称"
+                     />
+                   ) : (
+                     <span
+                       className="text-[15px] font-medium text-gray-700 cursor-pointer hover:text-gray-900"
+                       onClick={handleStartEditTitle}
+                       title="点击重命名"
+                     >
+                       {projectTitle}
+                     </span>
+                   )}
                    <div className="w-px h-4 bg-gray-300 mx-3" />
-                   <Icon name="Maximize" size={14} className="text-gray-500 cursor-pointer hover:text-gray-800" />
+                   <Icon
+                     name={isEditingTitle ? "Check" : "Pencil"}
+                     size={14}
+                     className={`cursor-pointer transition-colors ${isEditingTitle ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-800'}`}
+                     onClick={isEditingTitle ? handleSaveTitle : handleStartEditTitle}
+                   />
                 </div>
             </div>
             

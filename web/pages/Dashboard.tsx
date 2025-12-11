@@ -1,8 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../components/ui/Icon';
 import { projectsAPI } from '../services/api';
-import type { Project } from '../types';
+import type { Project, CanvasElement } from '../types';
+
+// 从 elements 中获取最新的图片 URL
+const getLatestImageFromElements = (elements: CanvasElement[]): string | null => {
+  // 倒序遍历，找到最新的图片
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
+    if (el.type === 'image' && el.content) {
+      return el.content;
+    }
+    if (el.type === 'card' && el.imageContent) {
+      return el.imageContent;
+    }
+  }
+  return null;
+};
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -186,45 +201,39 @@ const Dashboard: React.FC = () => {
             )}
 
             {/* Projects */}
-            {!isLoadingProjects && projects.map((project) => (
-                <div 
-                    key={project.id}
-                    onClick={() => navigate(`/project/${project.id}`)}
-                    className="group cursor-pointer aspect-[4/3] bg-white border border-gray-200 rounded-lg p-0 overflow-hidden flex flex-col hover:border-[#EADDFF] hover:shadow-lg transition-all"
-                >
-                    <div className="flex-1 bg-gray-50 relative overflow-hidden">
-                        {project.thumbnail ? (
-                             <img src={project.thumbnail} alt={project.title} className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" />
-                        ) : (
-                             <div className="w-full h-full dot-grid opacity-50" />
-                        )}
-                        
-                        {/* Collage effect elements simulation */}
-                        {project.elements.length > 0 && !project.thumbnail && (
-                            <div className="absolute inset-0 p-4">
-                                {project.elements.slice(0,3).map((el, i) => (
-                                    <div key={el.id} className="absolute bg-white shadow-sm p-1" style={{
-                                        left: `${20 + i * 20}%`, top: `${20 + i * 10}%`, width: '40%', height: '40%', transform: `rotate(${i * 5}deg)`
-                                    }}>
-                                        {el.type === 'image' && <img src={el.content} className="w-full h-full object-cover" />}
-                                    </div>
-                                ))}
+            {!isLoadingProjects && projects.map((project) => {
+                // 直接从 elements 中提取最新图片作为预览
+                const previewImage = getLatestImageFromElements(project.elements);
+
+                return (
+                    <div
+                        key={project.id}
+                        onClick={() => navigate(`/project/${project.id}`)}
+                        className="group cursor-pointer aspect-[4/3] bg-white border border-gray-200 rounded-lg p-0 overflow-hidden flex flex-col hover:border-[#EADDFF] hover:shadow-lg transition-all"
+                    >
+                        <div className="flex-1 bg-gray-50 relative overflow-hidden">
+                            {previewImage ? (
+                                 <img src={previewImage} alt={project.title} className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" />
+                            ) : (
+                                 <div className="w-full h-full dot-grid opacity-50 flex items-center justify-center">
+                                   <Icon name="ImageOff" size={32} className="text-gray-300" />
+                                 </div>
+                            )}
+                        </div>
+                        <div className="p-4 bg-[#F9F7FF] border-t border-gray-100">
+                            <div className="flex justify-between items-start">
+                                 <div>
+                                    <h3 className="font-medium text-gray-900 truncate pr-2 max-w-[180px]">{project.title}</h3>
+                                    <p className="text-sm text-gray-400 mt-1">{project.updatedAt}</p>
+                                 </div>
+                                 {project.isExample && (
+                                    <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-1 rounded">EXAMPLE</span>
+                                 )}
                             </div>
-                        )}
-                    </div>
-                    <div className="p-4 bg-[#F9F7FF] border-t border-gray-100">
-                        <div className="flex justify-between items-start">
-                             <div>
-                                <h3 className="font-medium text-gray-900 truncate pr-2 max-w-[180px]">{project.title}</h3>
-                                <p className="text-sm text-gray-400 mt-1">{project.updatedAt}</p>
-                             </div>
-                             {project.isExample && (
-                                <span className="text-[10px] font-bold bg-gray-200 text-gray-600 px-2 py-1 rounded">EXAMPLE</span>
-                             )}
                         </div>
                     </div>
-                </div>
-            ))}
+                );
+            })}
         </div>
 
         <footer className="mt-32 border-t border-gray-200 pt-8 flex justify-between items-center text-sm text-gray-500">
