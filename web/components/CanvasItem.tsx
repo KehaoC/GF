@@ -38,36 +38,50 @@ export const CanvasItem: React.FC<CanvasItemProps> = ({ element, isSelected, onM
     if (element.type !== 'card' || !element.cardType) return null;
 
     const colorScheme = CARD_TYPE_COLORS[element.cardType];
+    const hasImage = !!element.imageContent;
+    const hasText = !!element.textContent;
 
     return (
       <div className={`w-full h-full flex flex-col ${colorScheme.bg} border-2 ${colorScheme.border}`}>
         {/* Card Type Label */}
-        <div className="px-3 py-2 flex items-center justify-between border-b-2 border-current/10">
+        <div className="px-3 py-2 flex items-center justify-between border-b-2 border-current/10 shrink-0">
           <span className={`text-xs font-bold px-2 py-0.5 rounded ${colorScheme.label}`}>
             {colorScheme.text}
           </span>
         </div>
 
-        {/* Image Section */}
-        <div className="flex-1 bg-white m-2 rounded overflow-hidden">
-          {element.imageContent && (
-            <img
-              src={element.imageContent}
-              alt="card"
-              className="w-full h-full object-cover pointer-events-none select-none"
-              draggable={false}
-            />
+        {/* Content Area - 统一高度 */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Image Section - 有图片时显示 */}
+          {hasImage && (
+            <div className={`bg-white m-2 rounded overflow-hidden ${hasText ? 'flex-1' : 'flex-1'}`}>
+              <img
+                src={element.imageContent}
+                alt="card"
+                className="w-full h-full object-cover pointer-events-none select-none"
+                draggable={false}
+              />
+            </div>
           )}
-        </div>
 
-        {/* Text Section */}
-        <div className="px-3 py-3 bg-white/50 border-t-2 border-current/10">
-          <textarea
-            className="w-full h-16 resize-none outline-none bg-transparent text-gray-800 text-sm leading-snug"
-            defaultValue={element.textContent || ''}
-            readOnly={!isSelected}
-            placeholder="输入卡片描述..."
-          />
+          {/* Text Section - 有文本时显示 */}
+          {hasText && (
+            <div className={`px-3 bg-white/50 ${hasImage ? 'py-2 border-t-2 border-current/10 shrink-0' : 'flex-1 py-3 m-2 rounded bg-white'}`}>
+              <textarea
+                className={`w-full resize-none outline-none bg-transparent text-gray-800 text-sm leading-snug ${hasImage ? 'h-12' : 'h-full'}`}
+                defaultValue={element.textContent || ''}
+                readOnly={!isSelected}
+                placeholder="输入卡片描述..."
+              />
+            </div>
+          )}
+
+          {/* 如果都没有，显示占位 */}
+          {!hasImage && !hasText && (
+            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+              空卡片
+            </div>
+          )}
         </div>
       </div>
     );

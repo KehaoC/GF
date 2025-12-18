@@ -127,21 +127,24 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
   };
 
   const handleCreateCard = async () => {
-    // 检查是否有图片（可以是上传的文件或预填充的 URL）
-    if (!newCardImageFile && !newCardImagePreview) {
-      alert('请上传图片');
+    // 检查是否有图片或文本（至少有一个）
+    const hasImage = newCardImageFile || newCardImagePreview;
+    const hasText = newCardText.trim().length > 0;
+
+    if (!hasImage && !hasText) {
+      alert('请至少添加图片或文本');
       return;
     }
 
     setIsUploading(true);
 
     try {
-      let imageUrl: string;
+      let imageUrl: string = '';
 
       if (newCardImageFile) {
         // 有新上传的文件，需要上传到服务器
         imageUrl = await uploadFile(newCardImageFile);
-      } else {
+      } else if (newCardImagePreview) {
         // 使用预填充的 URL（来自画布的图片）
         imageUrl = newCardImagePreview;
       }
@@ -401,13 +404,21 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                       )}
                       {/* Card Preview */}
                       <div className="aspect-[3/2] rounded-lg overflow-hidden mb-2 bg-gray-100">
-                        <img
-                          src={card.imageContent}
-                          alt={card.title}
-                          className="w-full h-full object-cover"
-                        />
+                        {card.imageContent ? (
+                          <img
+                            src={card.imageContent}
+                            alt={card.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center p-3 bg-white">
+                            <p className="text-xs text-gray-600 line-clamp-4 text-center">
+                              {card.textContent || '空卡片'}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      {card.textContent && (
+                      {card.imageContent && card.textContent && (
                         <p className="text-xs text-gray-600 line-clamp-2">
                           {card.textContent}
                         </p>
@@ -498,6 +509,11 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
               {/* Create Card Form */}
               <div className="overflow-y-auto p-6 h-[500px]">
                 <div className="max-w-2xl mx-auto space-y-6">
+                  {/* Hint */}
+                  <div className="text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-lg">
+                    图片和描述至少填写一项
+                  </div>
+
                   {/* Card Type Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -524,7 +540,7 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                   {/* Image Upload */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      卡片图片
+                      卡片图片 <span className="text-gray-400 font-normal">(可选)</span>
                     </label>
                     <div className="space-y-3">
                       {newCardImagePreview ? (
@@ -594,9 +610,9 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                 </button>
                 <button
                   onClick={handleCreateCard}
-                  disabled={(!newCardImageFile && !newCardImagePreview) || isUploading}
+                  disabled={(!newCardImageFile && !newCardImagePreview && !newCardText.trim()) || isUploading}
                   className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                    (newCardImageFile || newCardImagePreview) && !isUploading
+                    (newCardImageFile || newCardImagePreview || newCardText.trim()) && !isUploading
                       ? 'bg-[#8576C7] text-white hover:bg-[#7463B8]'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
