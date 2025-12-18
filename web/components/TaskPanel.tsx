@@ -1,11 +1,13 @@
 import React from 'react';
 import { Icon } from './ui/Icon';
+import { ContentSegment } from './MixedInput';
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface GenerationTask {
   id: string;
   prompt: string;
+  segments?: ContentSegment[]; // 混合内容片段（用于生成时提取图片和文本）
   status: TaskStatus;
   progress: number; // 0-100
   createdAt: number;

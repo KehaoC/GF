@@ -4,9 +4,10 @@ import { Icon } from '../components/ui/Icon';
 import { CanvasItem } from '../components/CanvasItem';
 import { CardSelector } from '../components/CardSelector';
 import { TaskPanel, GenerationTask, TaskStatus } from '../components/TaskPanel';
+import { MixedInput, MixedInputHandle, ContentSegment } from '../components/MixedInput';
 import { CanvasElement, Tool, Viewport } from '../types';
 import { INITIAL_VIEWPORT, CardTemplate, CARD_LIBRARY } from '../constants';
-import { generateImageFromPrompt } from '../services/geminiService';
+import { generateImageFromPrompt, generateImageFromSegments } from '../services/geminiService';
 import { projectsAPI, cardsAPI, BackendCustomCard } from '../services/api';
 import { uploadBase64 } from '../services/fileService';
 
@@ -54,6 +55,8 @@ const Editor: React.FC = () => {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mixedInputRef = useRef<MixedInputHandle>(null);
+  const prevSelectedIdsRef = useRef<Set<string>>(new Set());
 
   // State
   const [elements, setElements] = useState<CanvasElement[]>([]);
@@ -62,7 +65,7 @@ const Editor: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPanning, setIsPanning] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
-  const [prompt, setPrompt] = useState('');
+  const [hasInputContent, setHasInputContent] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
   const [isCardSelectorOpen, setIsCardSelectorOpen] = useState(false);
@@ -132,8 +135,9 @@ const Editor: React.FC = () => {
         const cards: CardTemplate[] = backendCards.map((card: BackendCustomCard) => ({
           id: card.id.toString(),
           cardType: card.card_type as CardTemplate['cardType'],
+          title: card.text_content?.substring(0, 20) || '自定义卡片',
           imageContent: card.image_url,
-          textContent: card.text_content || undefined,
+          textContent: card.text_content || '',
         }));
         setCustomCards(cards);
       } catch (error) {
@@ -148,6 +152,73 @@ const Editor: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('hiddenLibraryCardIds', JSON.stringify(Array.from(hiddenLibraryCardIds)));
   }, [hiddenLibraryCardIds]);
+
+  // 监听画布选中元素变化，将新选中的元素内容插入到输入框
+  useEffect(() => {
+    // 找出新增的选中元素（在当前选中但不在上一次选中中的）
+    const newlySelectedIds = Array.from(selectedIds).filter(
+      id => !prevSelectedIdsRef.current.has(id)
+    );
+
+    // 更新上一次选中的引用
+    prevSelectedIdsRef.current = new Set(selectedIds);
+
+    // 如果没有新增选中的元素，不做任何操作
+    if (newlySelectedIds.length === 0) return;
+
+    // 获取新增选中的元素
+    const newlySelectedElements = elements.filter(el => newlySelectedIds.includes(el.id));
+
+    // 为每个新选中的元素插入胶囊
+    newlySelectedElements.forEach(el => {
+      // 处理图片类型元素
+      if (el.type === 'image' && el.content) {
+        mixedInputRef.current?.insertPill({
+          type: 'image',
+          content: el.content,
+          preview: el.content,
+          refId: el.id,
+        });
+      }
+
+      // 处理卡片类型元素
+      if (el.type === 'card') {
+        if (el.imageContent) {
+          mixedInputRef.current?.insertPill({
+            type: 'image',
+            content: el.imageContent,
+            preview: el.imageContent,
+            refId: el.id,
+          });
+        }
+        if (el.textContent) {
+          mixedInputRef.current?.insertPill({
+            type: 'ref-text',
+            content: el.textContent,
+            preview: el.textContent.length > 20
+              ? el.textContent.substring(0, 20) + '...'
+              : el.textContent,
+            refId: el.id,
+          });
+        }
+      }
+
+      // 处理文本类型元素
+      if (el.type === 'text' && el.content) {
+        mixedInputRef.current?.insertPill({
+          type: 'ref-text',
+          content: el.content,
+          preview: el.content.length > 20
+            ? el.content.substring(0, 20) + '...'
+            : el.content,
+          refId: el.id,
+        });
+      }
+    });
+
+    // 聚焦到输入框
+    mixedInputRef.current?.focus();
+  }, [selectedIds, elements]);
 
   // Keyboard Event Handler
   useEffect(() => {
@@ -309,22 +380,23 @@ const Editor: React.FC = () => {
         });
       }, 500);
 
-      // 获取选中的元素作为上下文
-      const contextElements = elements.filter(el => selectedIds.has(el.id));
-      const newImageUrl = await generateImageFromPrompt(pendingTask.prompt, contextElements);
+      // 根据是否有 segments 选择生成方式
+      let newImageUrl: string;
+      if (pendingTask.segments && pendingTask.segments.length > 0) {
+        // 使用新的 segments 方式生成
+        newImageUrl = await generateImageFromSegments(pendingTask.segments);
+      } else {
+        // 兼容旧的方式：获取选中的元素作为上下文
+        const contextElements = elements.filter(el => selectedIds.has(el.id));
+        newImageUrl = await generateImageFromPrompt(pendingTask.prompt, contextElements);
+      }
 
       clearInterval(progressInterval);
 
-      // 计算新元素位置
-      let startX = 0, startY = 0;
-      if (contextElements.length > 0) {
-        startX = contextElements[0].x + contextElements[0].width + 20;
-        startY = contextElements[0].y;
-      } else {
-        const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
-        startX = center.x;
-        startY = center.y;
-      }
+      // 计算新元素位置（放在画布中心）
+      const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
+      const startX = center.x - 200;
+      const startY = center.y - 200;
 
       // 创建新元素
       const newEl: CanvasElement = {
@@ -374,10 +446,11 @@ const Editor: React.FC = () => {
   }, [tasks, processNextTask]);
 
   // 添加任务到队列
-  const addTaskToQueue = useCallback((prompt: string) => {
+  const addTaskToQueue = useCallback((prompt: string, segments?: ContentSegment[]) => {
     const newTask: GenerationTask = {
       id: `task-${Date.now()}`,
       prompt,
+      segments, // 保存内容片段用于生成时提取图片
       status: 'pending',
       progress: 0,
       createdAt: Date.now(),
@@ -708,6 +781,7 @@ const Editor: React.FC = () => {
   };
 
   const handleCardSelect = (cardTemplate: CardTemplate) => {
+    // 将卡片添加到画布
     const center = screenToCanvas(window.innerWidth / 2, window.innerHeight / 2);
     const newCard: CanvasElement = {
         id: `card-${Date.now()}`,
@@ -726,6 +800,19 @@ const Editor: React.FC = () => {
     setActiveTool('select');
   };
 
+  // 处理输入框内容变化
+  const handleInputContentChange = useCallback((segments: ContentSegment[]) => {
+    const hasContent = segments.length > 0 && segments.some(
+      seg => seg.type !== 'text' || seg.content.trim() !== ''
+    );
+    setHasInputContent(hasContent);
+  }, []);
+
+  // 处理输入框空退格事件（清空选中状态）
+  const handleInputBackspaceEmpty = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
   const handleCreateCard = async (newCard: CardTemplate) => {
     try {
       // 调用后端 API 创建卡片
@@ -738,8 +825,9 @@ const Editor: React.FC = () => {
       const createdCard: CardTemplate = {
         id: backendCard.id.toString(),
         cardType: backendCard.card_type as CardTemplate['cardType'],
+        title: backendCard.text_content?.substring(0, 20) || '自定义卡片',
         imageContent: backendCard.image_url,
-        textContent: backendCard.text_content || undefined,
+        textContent: backendCard.text_content || '',
       };
       setCustomCards(prev => [...prev, createdCard]);
     } catch (error) {
@@ -865,7 +953,25 @@ const Editor: React.FC = () => {
 
   // AI Generation
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+    const content = mixedInputRef.current?.getContent() || [];
+    const isEmpty = content.length === 0 || content.every(
+      seg => seg.type === 'text' && !seg.content.trim()
+    );
+
+    if (isEmpty) return;
+
+    // 构建带有顺序的 prompt 字符串
+    // 格式: 文本直接拼接, 图片用 [IMAGE:url], 引用文本用 [REF:content]
+    const orderedPrompt = content.map(seg => {
+      if (seg.type === 'text') {
+        return seg.content;
+      } else if (seg.type === 'image') {
+        return `[IMAGE:${seg.content}]`;
+      } else if (seg.type === 'ref-text') {
+        return `[REF:${seg.content}]`;
+      }
+      return '';
+    }).join('');
 
     if (aiMode === 'inspire') {
         // Inspire Mode: Generate multiple Inspiration Cards (保持原有的同步逻辑)
@@ -920,7 +1026,7 @@ const Editor: React.FC = () => {
 
             setElements(prev => [...prev, ...newCards]);
             setSelectedIds(new Set(newCards.map(c => c.id)));
-            setPrompt('');
+            mixedInputRef.current?.clear();
         } catch (error) {
             console.error("Generation failed", error);
         } finally {
@@ -928,10 +1034,17 @@ const Editor: React.FC = () => {
         }
     } else {
         // Generate Mode: 使用任务队列，支持批量生图
-        addTaskToQueue(prompt);
-        setPrompt('');
+        // 传递 segments 以便正确提取图片和文本
+        addTaskToQueue(orderedPrompt, content);
+        mixedInputRef.current?.clear();
+        setSelectedIds(new Set()); // 清空选中状态
     }
   };
+
+  // 处理输入框回车事件（定义在 handleGenerate 之后避免循环引用）
+  const handleInputEnter = useCallback(() => {
+    handleGenerate();
+  }, [handleGenerate]);
 
   // Loading state
   if (isLoadingProject) {
@@ -1206,23 +1319,26 @@ const Editor: React.FC = () => {
                 </div>
 
                 {/* Input Pill - Styled based on mode */}
-                <div className={`flex-1 ${MODE_CONFIGS[aiMode].bgColor} h-[68px] rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] border-2 ${MODE_CONFIGS[aiMode].borderColor} pl-6 pr-2 flex items-center gap-4 transition-all focus-within:shadow-lg`}>
+                <div className={`flex-1 ${MODE_CONFIGS[aiMode].bgColor} min-h-[68px] rounded-[34px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border-2 ${MODE_CONFIGS[aiMode].borderColor} pl-6 pr-2 py-2 flex items-center gap-3 transition-all focus-within:shadow-lg`}>
                     <div className={`w-10 h-10 rounded-full ${MODE_CONFIGS[aiMode].buttonBg} flex items-center justify-center shrink-0`}>
                       <Icon name={MODE_CONFIGS[aiMode].icon as any} size={20} className={MODE_CONFIGS[aiMode].color} />
                     </div>
-                    <input
-                        type="text"
+
+                    {/* Mixed Input with pills and text */}
+                    <MixedInput
+                        ref={mixedInputRef}
                         placeholder={MODE_CONFIGS[aiMode].placeholder}
-                        className={`flex-1 bg-transparent border-none outline-none text-[18px] ${MODE_CONFIGS[aiMode].color} placeholder-slate-400 h-full font-normal`}
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+                        className={`flex-1 min-w-[120px] text-[18px] ${MODE_CONFIGS[aiMode].color} font-normal leading-10`}
+                        onContentChange={handleInputContentChange}
+                        onEnter={handleInputEnter}
+                        onBackspaceEmpty={handleInputBackspaceEmpty}
                     />
+
                     <button
                         onClick={handleGenerate}
-                        disabled={!prompt}
+                        disabled={!hasInputContent}
                         className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shrink-0 ${
-                            prompt
+                            hasInputContent
                             ? `${MODE_CONFIGS[aiMode].buttonBg} ${MODE_CONFIGS[aiMode].color} ${MODE_CONFIGS[aiMode].buttonHover}`
                             : 'bg-[#F2F2F2] text-gray-300 cursor-not-allowed'
                         }`}
