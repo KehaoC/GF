@@ -85,6 +85,12 @@ const Editor: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [projectTitle, setProjectTitle] = useState('Untitled');
 
+  // 隐藏的系统卡片 ID 列表（存储在 localStorage）
+  const [hiddenLibraryCardIds, setHiddenLibraryCardIds] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('hiddenLibraryCardIds');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+
   // 标题编辑状态
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
@@ -137,6 +143,11 @@ const Editor: React.FC = () => {
     loadCustomCards();
   }, []);
 
+  // Save hidden library card IDs to localStorage
+  useEffect(() => {
+    localStorage.setItem('hiddenLibraryCardIds', JSON.stringify(Array.from(hiddenLibraryCardIds)));
+  }, [hiddenLibraryCardIds]);
+
   // Keyboard Event Handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -171,6 +182,74 @@ const Editor: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedIds]);
+
+  // 禁用浏览器默认手势（前进/后退、缩放）
+  useEffect(() => {
+    // 禁用鼠标前进/后退按钮
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 3 || e.button === 4) {
+        e.preventDefault();
+      }
+    };
+
+    // 禁用触控板/触屏的左右滑动导航
+    const handleWheel = (e: WheelEvent) => {
+      // 禁用浏览器缩放 (Ctrl/Cmd + 滚轮)
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+      // 禁用水平滚动触发的前进/后退 (macOS 触控板)
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX !== 0) {
+        e.preventDefault();
+      }
+    };
+
+    // 禁用键盘快捷键 (Cmd+[, Cmd+], Alt+Left, Alt+Right)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + [ 或 ]
+      if ((e.metaKey || e.ctrlKey) && (e.key === '[' || e.key === ']')) {
+        e.preventDefault();
+      }
+      // Alt + Left/Right Arrow
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+      }
+      // 禁用 Cmd/Ctrl + 0 (重置缩放)
+      if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+        e.preventDefault();
+      }
+    };
+
+    // 禁用触控板捏合缩放
+    const handleGestureStart = (e: Event) => {
+      e.preventDefault();
+    };
+
+    const handleGestureChange = (e: Event) => {
+      e.preventDefault();
+    };
+
+    const handleGestureEnd = (e: Event) => {
+      e.preventDefault();
+    };
+
+    // 添加事件监听
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('gesturestart', handleGestureStart);
+    document.addEventListener('gesturechange', handleGestureChange);
+    document.addEventListener('gestureend', handleGestureEnd);
+
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('gesturestart', handleGestureStart);
+      document.removeEventListener('gesturechange', handleGestureChange);
+      document.removeEventListener('gestureend', handleGestureEnd);
+    };
+  }, []);
 
   // Auto-save: Debounce 2 秒后自动保存
   useEffect(() => {
@@ -668,15 +747,44 @@ const Editor: React.FC = () => {
     }
   };
 
+  // 判断是否是自定义卡片（数字 ID）还是系统卡片（字符串 ID 如 hook-1）
+  const isCustomCardId = (cardId: string) => !isNaN(Number(cardId));
+
   const handleDeleteCard = async (cardId: string) => {
     try {
-      // 调用后端 API 删除卡片
-      await cardsAPI.delete(parseInt(cardId, 10));
-      // 从状态中移除
-      setCustomCards(prev => prev.filter(card => card.id !== cardId));
+      if (isCustomCardId(cardId)) {
+        // 自定义卡片：调用后端 API 删除
+        await cardsAPI.delete(parseInt(cardId, 10));
+        setCustomCards(prev => prev.filter(card => card.id !== cardId));
+      } else {
+        // 系统卡片：添加到隐藏列表
+        setHiddenLibraryCardIds(prev => new Set([...prev, cardId]));
+      }
     } catch (error) {
       console.error('Failed to delete card:', error);
       alert('删除卡片失败，请重试');
+    }
+  };
+
+  const handleBatchDeleteCards = async (cardIds: string[]) => {
+    try {
+      // 分离自定义卡片和系统卡片
+      const customCardIds = cardIds.filter(isCustomCardId);
+      const libraryCardIds = cardIds.filter(id => !isCustomCardId(id));
+
+      // 自定义卡片：并行调用后端 API 删除
+      if (customCardIds.length > 0) {
+        await Promise.all(customCardIds.map(id => cardsAPI.delete(parseInt(id, 10))));
+        setCustomCards(prev => prev.filter(card => !customCardIds.includes(card.id)));
+      }
+
+      // 系统卡片：添加到隐藏列表
+      if (libraryCardIds.length > 0) {
+        setHiddenLibraryCardIds(prev => new Set([...prev, ...libraryCardIds]));
+      }
+    } catch (error) {
+      console.error('Failed to batch delete cards:', error);
+      throw error; // 抛出错误让 CardSelector 处理
     }
   };
 
@@ -1135,8 +1243,10 @@ const Editor: React.FC = () => {
             onClose={() => setIsCardSelectorOpen(false)}
             onSelect={handleCardSelect}
             customCards={customCards}
+            hiddenLibraryCardIds={hiddenLibraryCardIds}
             onCreateCard={handleCreateCard}
             onDeleteCard={handleDeleteCard}
+            onBatchDeleteCards={handleBatchDeleteCards}
         />
 
         {/* Help Modal */}

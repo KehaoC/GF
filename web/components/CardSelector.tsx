@@ -55,11 +55,13 @@ interface CardSelectorProps {
   onClose: () => void;
   onSelect: (card: CardTemplate) => void;
   customCards?: CardTemplate[];
+  hiddenLibraryCardIds?: Set<string>;
   onCreateCard?: (card: CardTemplate) => void;
   onDeleteCard?: (cardId: string) => void;
+  onBatchDeleteCards?: (cardIds: string[]) => void;
 }
 
-export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onSelect, customCards = [], onCreateCard, onDeleteCard }) => {
+export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onSelect, customCards = [], hiddenLibraryCardIds = new Set(), onCreateCard, onDeleteCard, onBatchDeleteCards }) => {
   const [activeTab, setActiveTab] = useState<CardType>('hook');
   const [selectedCard, setSelectedCard] = useState<CardTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -69,6 +71,9 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
   const [newCardText, setNewCardText] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -83,6 +88,8 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
   const handleClose = () => {
     setSelectedCard(null);
     setIsCreating(false);
+    setIsBatchMode(false);
+    setSelectedCardIds(new Set());
     resetCreateForm();
     onClose();
   };
@@ -163,8 +170,67 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
   // 检查卡片是否在 customCards 列表中
   const isCustomCard = (cardId: string) => customCards.some(card => card.id === cardId);
 
-  // Merge library cards with custom cards
-  const libraryCards = CARD_LIBRARY[activeTab];
+  // 切换批量模式
+  const toggleBatchMode = () => {
+    setIsBatchMode(!isBatchMode);
+    setSelectedCardIds(new Set());
+    setSelectedCard(null);
+  };
+
+  // 切换卡片选中状态
+  const toggleCardSelection = (cardId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedCardIds(prev => {
+      const next = new Set(prev);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else {
+        next.add(cardId);
+      }
+      return next;
+    });
+  };
+
+  // 全选当前类型的所有卡片
+  const selectAllCards = () => {
+    const allCardIds = cardsInLibrary.map(card => card.id);
+    setSelectedCardIds(new Set(allCardIds));
+  };
+
+  // 取消全选
+  const deselectAll = () => {
+    setSelectedCardIds(new Set());
+  };
+
+  // 批量删除
+  const handleBatchDelete = async () => {
+    if (selectedCardIds.size === 0) return;
+
+    const confirmed = window.confirm(`确定要删除选中的 ${selectedCardIds.size} 张卡片吗？`);
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      if (onBatchDeleteCards) {
+        await onBatchDeleteCards(Array.from(selectedCardIds));
+      } else if (onDeleteCard) {
+        // 如果没有批量删除函数，逐个删除
+        for (const cardId of selectedCardIds) {
+          await onDeleteCard(cardId);
+        }
+      }
+      setSelectedCardIds(new Set());
+      setIsBatchMode(false);
+    } catch (error) {
+      console.error('Batch delete failed:', error);
+      alert('删除失败，请重试');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Merge library cards with custom cards, filtering out hidden ones
+  const libraryCards = CARD_LIBRARY[activeTab].filter(card => !hiddenLibraryCardIds.has(card.id));
   const customCardsOfType = customCards.filter(card => card.cardType === activeTab);
   const cardsInLibrary = [...libraryCards, ...customCardsOfType];
   const activeTabOption = CARD_OPTIONS.find(opt => opt.type === activeTab);
@@ -191,7 +257,25 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {!isCreating && (
+              {!isCreating && !isBatchMode && cardsInLibrary.length > 0 && (
+                <button
+                  onClick={toggleBatchMode}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white/50 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Icon name="CheckSquare" size={16} />
+                  批量管理
+                </button>
+              )}
+              {!isCreating && isBatchMode && (
+                <button
+                  onClick={toggleBatchMode}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white/50 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Icon name="X" size={16} />
+                  取消
+                </button>
+              )}
+              {!isCreating && !isBatchMode && (
                 <button
                   onClick={() => setIsCreating(true)}
                   className="px-4 py-2 bg-[#8576C7] text-white text-sm font-medium rounded-lg hover:bg-[#7463B8] transition-colors flex items-center gap-2"
@@ -236,26 +320,53 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
 
               {/* Content - Card Grid */}
               <div className="overflow-y-auto p-6 h-[500px]">
-                <div className="mb-4">
+                <div className="mb-4 flex items-center justify-between">
                   <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${activeTabOption?.color}`}>
                     <Icon name={activeTabOption?.icon as any} size={14} />
                     <span className="font-medium">{activeTabOption?.description}</span>
                   </div>
+                  {isBatchMode && cardsInLibrary.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={selectedCardIds.size === cardsInLibrary.length ? deselectAll : selectAllCards}
+                        className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        {selectedCardIds.size === cardsInLibrary.length ? '取消全选' : '全选'}
+                      </button>
+                      <span className="text-xs text-gray-500">
+                        已选 {selectedCardIds.size} 项
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {cardsInLibrary.map((card) => (
                     <div
                       key={card.id}
-                      onClick={() => setSelectedCard(card)}
+                      onClick={isBatchMode ? (e: React.MouseEvent) => toggleCardSelection(card.id, e) : () => setSelectedCard(card)}
                       className={`relative p-3 rounded-xl border-2 transition-all text-left cursor-pointer group ${
-                        selectedCard?.id === card.id
-                          ? 'border-[#8576C7] bg-purple-50 shadow-md scale-105'
-                          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                        isBatchMode && selectedCardIds.has(card.id)
+                          ? 'border-red-400 bg-red-50 shadow-md'
+                          : selectedCard?.id === card.id
+                            ? 'border-[#8576C7] bg-purple-50 shadow-md scale-105'
+                            : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                       }`}
                     >
-                      {/* Delete Button for custom cards */}
-                      {isCustomCard(card.id) && (
+                      {/* Batch mode checkbox for all cards */}
+                      {isBatchMode && (
+                        <div
+                          className={`absolute top-1 left-1 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
+                            selectedCardIds.has(card.id)
+                              ? 'bg-red-500 border-red-500 text-white'
+                              : 'bg-white border-gray-300'
+                          }`}
+                        >
+                          {selectedCardIds.has(card.id) && <Icon name="Check" size={14} />}
+                        </div>
+                      )}
+                      {/* Delete Button for custom cards (non-batch mode) */}
+                      {!isBatchMode && isCustomCard(card.id) && (
                         <button
                           onClick={(e) => handleDeleteCard(card.id, e)}
                           className={`absolute top-1 right-1 z-10 p-1.5 rounded-full transition-all ${
@@ -294,33 +405,72 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
 
               {/* Footer */}
               <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-                <div className="text-sm text-gray-500">
-                  {!selectedCard && '请选择一张卡片'}
-                  {selectedCard && (
-                    <span className="text-purple-600 font-medium">
-                      已选择：{selectedCard.title}
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleClose}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleConfirm}
-                    disabled={!selectedCard}
-                    className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      selectedCard
-                        ? 'bg-[#8576C7] text-white hover:bg-[#7463B8]'
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
-                  >
-                    确认添加
-                  </button>
-                </div>
+                {isBatchMode ? (
+                  <>
+                    <div className="text-sm text-gray-500">
+                      {selectedCardIds.size === 0 ? (
+                        '点击卡片选择要删除的项目'
+                      ) : (
+                        <span className="text-red-600 font-medium">
+                          已选择 {selectedCardIds.size} 张卡片
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={toggleBatchMode}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={handleBatchDelete}
+                        disabled={selectedCardIds.size === 0 || isDeleting}
+                        className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                          selectedCardIds.size > 0 && !isDeleting
+                            ? 'bg-red-500 text-white hover:bg-red-600'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {isDeleting && (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        )}
+                        <Icon name="Trash2" size={16} />
+                        {isDeleting ? '删除中...' : '删除选中'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm text-gray-500">
+                      {!selectedCard && '请选择一张卡片'}
+                      {selectedCard && (
+                        <span className="text-purple-600 font-medium">
+                          已选择：{selectedCard.title}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleClose}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={handleConfirm}
+                        disabled={!selectedCard}
+                        className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors ${
+                          selectedCard
+                            ? 'bg-[#8576C7] text-white hover:bg-[#7463B8]'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        确认添加
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           ) : (

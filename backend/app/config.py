@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # File Upload
     UPLOAD_DIR: str = "./uploads"
-    MAX_FILE_SIZE: int = 30 * 1024 * 1024  # 10MB
+    MAX_FILE_SIZE: int = 60 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "gif", "webp"]
 
     class Config:
