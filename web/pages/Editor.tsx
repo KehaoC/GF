@@ -26,7 +26,7 @@ interface ModeConfig {
 
 const MODE_CONFIGS: Record<AIMode, ModeConfig> = {
   generate: {
-    label: '生图模式',
+    label: 'Darwing',
     icon: 'Sparkles',
     placeholder: '描述你想要生成的图片...',
     color: 'text-[#8576C7]',
@@ -37,7 +37,7 @@ const MODE_CONFIGS: Record<AIMode, ModeConfig> = {
     description: '使用 AI 生成全新图片'
   },
   inspire: {
-    label: 'Inspire 模式',
+    label: 'Inspiring',
     icon: 'Lightbulb',
     placeholder: '描述你想要的创意灵感...',
     color: 'text-[#F59E0B]',
@@ -66,6 +66,7 @@ const Editor: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
   const [isCardSelectorOpen, setIsCardSelectorOpen] = useState(false);
+  const [cardSelectorInitialImage, setCardSelectorInitialImage] = useState<string | undefined>(undefined);
   const [resizingElement, setResizingElement] = useState<{ id: string; handle: string; startX: number; startY: number; startWidth: number; startHeight: number; startElementX: number; startElementY: number } | null>(null);
   // 自定义卡片（从后端加载）
   const [customCards, setCustomCards] = useState<CardTemplate[]>([]);
@@ -750,6 +751,12 @@ const Editor: React.FC = () => {
   // 判断是否是自定义卡片（数字 ID）还是系统卡片（字符串 ID 如 hook-1）
   const isCustomCardId = (cardId: string) => !isNaN(Number(cardId));
 
+  // 处理从画布收藏图片到卡片集
+  const handleSaveToCards = (imageUrl: string) => {
+    setCardSelectorInitialImage(imageUrl);
+    setIsCardSelectorOpen(true);
+  };
+
   const handleDeleteCard = async (cardId: string) => {
     try {
       if (isCustomCardId(cardId)) {
@@ -1102,6 +1109,7 @@ const Editor: React.FC = () => {
                         isSelected={selectedIds.has(el.id)}
                         onMouseDown={handleElementMouseDown}
                         onResizeStart={handleResizeStart}
+                        onSaveToCards={handleSaveToCards}
                     />
                  ))}
 
@@ -1240,13 +1248,17 @@ const Editor: React.FC = () => {
         {/* Card Selector Modal */}
         <CardSelector
             isOpen={isCardSelectorOpen}
-            onClose={() => setIsCardSelectorOpen(false)}
+            onClose={() => {
+              setIsCardSelectorOpen(false);
+              setCardSelectorInitialImage(undefined);
+            }}
             onSelect={handleCardSelect}
             customCards={customCards}
             hiddenLibraryCardIds={hiddenLibraryCardIds}
             onCreateCard={handleCreateCard}
             onDeleteCard={handleDeleteCard}
             onBatchDeleteCards={handleBatchDeleteCards}
+            initialImageUrl={cardSelectorInitialImage}
         />
 
         {/* Help Modal */}

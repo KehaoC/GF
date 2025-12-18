@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CanvasElement } from '../types';
+import { Icon } from './ui/Icon';
 
 interface CanvasItemProps {
   element: CanvasElement;
   isSelected: boolean;
   onMouseDown: (e: React.MouseEvent, id: string) => void;
   onResizeStart?: (e: React.MouseEvent, id: string, handle: string) => void;
+  onSaveToCards?: (imageUrl: string) => void;
 }
 
 const CARD_TYPE_COLORS = {
@@ -16,11 +18,20 @@ const CARD_TYPE_COLORS = {
   constraint: { bg: 'bg-red-50', border: 'border-red-200', label: 'bg-red-100 text-red-700', text: 'Constraint' },
 };
 
-export const CanvasItem: React.FC<CanvasItemProps> = ({ element, isSelected, onMouseDown, onResizeStart }) => {
+export const CanvasItem: React.FC<CanvasItemProps> = ({ element, isSelected, onMouseDown, onResizeStart, onSaveToCards }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
   const handleResizeMouseDown = (e: React.MouseEvent, handle: string) => {
     e.stopPropagation();
     if (onResizeStart) {
       onResizeStart(e, element.id, handle);
+    }
+  };
+
+  const handleSaveToCards = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onSaveToCards && element.content) {
+      onSaveToCards(element.content);
     }
   };
   const renderCardContent = () => {
@@ -73,7 +84,26 @@ export const CanvasItem: React.FC<CanvasItemProps> = ({ element, isSelected, onM
         height: element.height,
       }}
       onMouseDown={(e) => onMouseDown(e, element.id)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Hover Toolbar - Only for image type */}
+      {element.type === 'image' && isHovered && (
+        <div
+          className="absolute -top-12 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-1.5 bg-white rounded-lg shadow-lg border border-gray-200"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleSaveToCards}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-purple-50 hover:text-[#8576C7] rounded-md transition-colors"
+            title="收藏到卡片集"
+          >
+            <Icon name="Bookmark" size={16} />
+            <span>收藏</span>
+          </button>
+        </div>
+      )}
+
       {/* Selection Border */}
       <div
         className={`absolute -inset-1 rounded-xl pointer-events-none border-2 transition-all ${

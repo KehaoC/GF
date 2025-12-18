@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { CardType } from '../types';
 import { CardTemplate, CARD_LIBRARY } from '../constants';
 import { Icon } from './ui/Icon';
@@ -59,9 +59,11 @@ interface CardSelectorProps {
   onCreateCard?: (card: CardTemplate) => void;
   onDeleteCard?: (cardId: string) => void;
   onBatchDeleteCards?: (cardIds: string[]) => void;
+  /** 预填充的图片 URL，设置后会自动进入创建模式 */
+  initialImageUrl?: string;
 }
 
-export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onSelect, customCards = [], hiddenLibraryCardIds = new Set(), onCreateCard, onDeleteCard, onBatchDeleteCards }) => {
+export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onSelect, customCards = [], hiddenLibraryCardIds = new Set(), onCreateCard, onDeleteCard, onBatchDeleteCards, initialImageUrl }) => {
   const [activeTab, setActiveTab] = useState<CardType>('hook');
   const [selectedCard, setSelectedCard] = useState<CardTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -75,6 +77,16 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 当 initialImageUrl 变化时，自动进入创建模式并预填充图片
+  useEffect(() => {
+    if (isOpen && initialImageUrl) {
+      setIsCreating(true);
+      setNewCardImagePreview(initialImageUrl);
+      // initialImageUrl 是已上传的 URL，不需要再上传
+      setNewCardImageFile(null);
+    }
+  }, [isOpen, initialImageUrl]);
 
   if (!isOpen) return null;
 
@@ -115,7 +127,8 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
   };
 
   const handleCreateCard = async () => {
-    if (!newCardImageFile) {
+    // 检查是否有图片（可以是上传的文件或预填充的 URL）
+    if (!newCardImageFile && !newCardImagePreview) {
       alert('请上传图片');
       return;
     }
@@ -123,8 +136,15 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
     setIsUploading(true);
 
     try {
-      // 上传图片到服务器
-      const imageUrl = await uploadFile(newCardImageFile);
+      let imageUrl: string;
+
+      if (newCardImageFile) {
+        // 有新上传的文件，需要上传到服务器
+        imageUrl = await uploadFile(newCardImageFile);
+      } else {
+        // 使用预填充的 URL（来自画布的图片）
+        imageUrl = newCardImagePreview;
+      }
 
       const newCard: CardTemplate = {
         id: `custom-${Date.now()}`,
@@ -574,9 +594,9 @@ export const CardSelector: React.FC<CardSelectorProps> = ({ isOpen, onClose, onS
                 </button>
                 <button
                   onClick={handleCreateCard}
-                  disabled={!newCardImageFile || isUploading}
+                  disabled={(!newCardImageFile && !newCardImagePreview) || isUploading}
                   className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                    newCardImageFile && !isUploading
+                    (newCardImageFile || newCardImagePreview) && !isUploading
                       ? 'bg-[#8576C7] text-white hover:bg-[#7463B8]'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
